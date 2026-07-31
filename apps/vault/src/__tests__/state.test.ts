@@ -15,7 +15,15 @@ afterEach(() => {
 describe('loadPersisted', () => {
   it('returns defaults when nothing is stored', () => {
     stubStorage(null);
-    expect(loadPersisted()).toEqual(defaults());
+    const state = loadPersisted();
+    const base = defaults();
+    // memberSince is stamped with the current time on both sides — compare
+    // everything else, then only check it is a valid timestamp.
+    expect({ ...state, profile: { ...state.profile, memberSince: '' } }).toEqual({
+      ...base,
+      profile: { ...base.profile, memberSince: '' },
+    });
+    expect(new Date(state.profile.memberSince).getTime()).not.toBeNaN();
   });
 
   it('survives malformed JSON and non-object payloads', () => {
