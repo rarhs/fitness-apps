@@ -145,6 +145,17 @@ export const mutations = {
   togglePref(d: Persisted, index: number): Persisted {
     return { ...d, prefs: d.prefs.map((p, i) => (i === index ? !p : p)) };
   },
+  /** Replace the whole state with a merge result, as-is. No stamps — the
+   * merged object is already reconciled against the backend. */
+  hydrate(_d: Persisted, merged: Persisted): Persisted {
+    return merged;
+  },
+  /** Merge identity-derived fields into the profile WITHOUT stamping
+   * updatedAt: a seed must lose last-write-wins to any profile the user
+   * actually edited (possibly on another device). */
+  seedProfile(d: Persisted, patch: Partial<Profile>): Persisted {
+    return { ...d, profile: { ...d.profile, ...patch } };
+  },
 };
 
 export interface AppState extends Persisted {
@@ -156,6 +167,8 @@ export interface AppState extends Persisted {
   addSession: (rec: SessionRecord) => void;
   setProfile: (patch: Partial<Profile>) => void;
   togglePref: (index: number) => void;
+  hydrate: (merged: Persisted) => void;
+  seedProfile: (patch: Partial<Profile>) => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -182,6 +195,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addSession: (rec) => setData((d) => mutations.addSession(d, rec)),
       setProfile: (patch) => setData((d) => mutations.setProfile(d, patch)),
       togglePref: (index) => setData((d) => mutations.togglePref(d, index)),
+      hydrate: (merged) => setData((d) => mutations.hydrate(d, merged)),
+      seedProfile: (patch) => setData((d) => mutations.seedProfile(d, patch)),
     }),
     [data],
   );

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router';
 import { App } from './App';
 import { AuthProvider } from './auth-context';
 import { AppStateProvider } from './state';
+import { SyncProvider } from './sync-context';
 import './styles/nocturne.css';
 import './styles/app.css';
 
@@ -12,7 +13,9 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <AppStateProvider>
         <AuthProvider>
-          <App />
+          <SyncProvider>
+            <App />
+          </SyncProvider>
         </AuthProvider>
       </AppStateProvider>
     </BrowserRouter>

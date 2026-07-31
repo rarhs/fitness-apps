@@ -65,8 +65,11 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
       items: [{ id: '0025', sets: '4', reps: '8-10' }],
       updatedAt: 1753960000000,
     };
-    const older = session('11111111-0000-4000-8000-000000000001', '2026-07-29T10:00:00.000Z');
-    const newer = session('22222222-0000-4000-8000-000000000002', '2026-07-31T10:00:00.000Z');
+    // Fresh ids every run: sessions.id is a global primary key and pushes are
+    // ON CONFLICT DO NOTHING, so a reused id from an earlier run's throwaway
+    // user would silently swallow the insert.
+    const older = session(crypto.randomUUID(), '2026-07-29T10:00:00.000Z');
+    const newer = session(crypto.randomUUID(), '2026-07-31T10:00:00.000Z');
 
     await backend.putProfile(profile);
     await backend.putRoutine(routine);
@@ -81,7 +84,7 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
   }, 15_000);
 
   it('treats session pushes as append-only and idempotent', async () => {
-    const original = session('33333333-0000-4000-8000-000000000003', '2026-07-30T10:00:00.000Z');
+    const original = session(crypto.randomUUID(), '2026-07-30T10:00:00.000Z');
     await backend.pushSessions([original]);
     // Same id, different content: must be ignored, never rewritten.
     await backend.pushSessions([{ ...original, name: 'rewritten', volumeKg: 1 }]);
