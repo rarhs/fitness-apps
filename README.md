@@ -9,7 +9,9 @@ fitness-apps/
 ├── packages/
 │   └── exercise-data/   # shared data layer: types, slim exercise index,
 │                        # media URL helpers, runtime dataset fetch
-└── apps/                # one workspace per app (empty so far)
+└── apps/
+    └── vault/           # exercise library, routine builder and session
+                         # logger (Vite + React, localStorage persistence)
 ```
 
 ## Quickstart

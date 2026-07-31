@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-An npm-workspaces monorepo for fitness apps built on the **exercises-dataset** (1,324 exercises, multilingual instructions, 180×180 media). Apps live in `apps/` (empty until the first app lands); shared code lives in `packages/`.
+An npm-workspaces monorepo for fitness apps built on the **exercises-dataset** (1,324 exercises, multilingual instructions, 180×180 media). Apps live in `apps/` (first app: `apps/vault`); shared code lives in `packages/`.
 
 ## Related repositories (siblings in `C:\Users\sagor\code`)
 
@@ -37,6 +37,10 @@ The shared data layer. Key design decisions:
 ## Licensing constraint (applies to every app)
 
 Dataset structure and instruction text are MIT, but **all exercise media is © Gym Visual, redistributed with permission at 180×180 only**. Every app UI that displays exercise images/GIFs must show the attribution (`DATASET_ATTRIBUTION` export: `© Gym visual — https://gymvisual.com/`), and media must never be upscaled, re-hosted at higher resolution, or stripped of attribution.
+
+## apps/vault
+
+"Vault" — an exercise reference library, routine builder and session logger, implemented from the Claude Design doc *Vault - Exercise Library* (Nocturne design system, vendored at `apps/vault/src/styles/nocturne.css`). Vite + React SPA, client-only: routines, logged sessions, profile and preferences persist to localStorage; exercise media and instruction text load from the dataset's Pages deployment at runtime. Dev with `npm run dev --workspace @fitness-apps/vault`, build with `npm run build --workspace @fitness-apps/vault`. Routing uses `react-router` v8 (the package itself, not `react-router-dom`).
 
 ## Adding an app
 
