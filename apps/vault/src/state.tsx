@@ -10,9 +10,13 @@ export interface Routine {
   name: string;
   restSec: number;
   items: RoutineItem[];
+  /** ms epoch of the last user edit; absent = never touched (LWW loser). */
+  updatedAt?: number;
 }
 
 export interface SessionRecord {
+  /** Client-generated UUID — the append-only sync identity. */
+  id: string;
   date: string;
   name: string;
   durationSec: number;
@@ -29,6 +33,8 @@ export interface Profile {
   units: 'kg' | 'lb';
   defaultRestSec: number;
   memberSince: string;
+  /** ms epoch of the last user edit; absent = never touched (LWW loser). */
+  updatedAt?: number;
 }
 
 export interface Persisted {

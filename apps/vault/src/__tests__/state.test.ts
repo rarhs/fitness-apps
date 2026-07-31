@@ -88,6 +88,7 @@ describe('mutations', () => {
 
   it('addSession prepends newest first', () => {
     const rec: SessionRecord = {
+      id: 's-new',
       date: '2026-07-31T10:00:00.000Z',
       name: 'Push A',
       durationSec: 3000,
@@ -96,7 +97,10 @@ describe('mutations', () => {
       exerciseIds: ['0025'],
       regions: { chest: 3 },
     };
-    const next = mutations.addSession(mutations.addSession(base, { ...rec, name: 'older' }), rec);
+    const next = mutations.addSession(
+      mutations.addSession(base, { ...rec, id: 's-old', name: 'older' }),
+      rec,
+    );
     expect(next.history.map((h) => h.name)).toEqual(['Push A', 'older']);
   });
 
