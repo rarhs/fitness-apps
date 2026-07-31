@@ -1,4 +1,4 @@
-import type { Profile, Routine, RoutineItem, SessionRecord } from '../state';
+import type { PersistedSet, Profile, Routine, RoutineItem, SessionRecord } from '../state';
 
 /** Row shapes as PostgREST serializes them (see supabase/migrations). */
 export interface SessionRow {
@@ -11,6 +11,9 @@ export interface SessionRow {
   set_count: number;
   exercise_ids: string[];
   regions: Record<string, number>;
+  /** Per-set logs aligned with exercise_ids; [] for records that predate
+   * set persistence. */
+  sets: PersistedSet[][];
 }
 
 export interface RoutineRow {
@@ -50,6 +53,7 @@ export function sessionToRow(session: SessionRecord, userId: string): SessionRow
     set_count: session.setCount,
     exercise_ids: session.exerciseIds,
     regions: session.regions,
+    sets: session.sets ?? [],
   };
 }
 
@@ -63,6 +67,7 @@ export function rowToSession(row: SessionRow): SessionRecord {
     setCount: row.set_count,
     exerciseIds: row.exercise_ids,
     regions: row.regions,
+    ...(row.sets.length > 0 ? { sets: row.sets } : {}),
   };
 }
 

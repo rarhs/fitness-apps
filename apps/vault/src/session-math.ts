@@ -1,4 +1,4 @@
-import type { SessionRecord } from './state';
+import type { PersistedSet, SessionRecord } from './state';
 import { LB_TO_KG } from './lib';
 
 export interface LoggedSet {
@@ -39,6 +39,19 @@ export function aggregateRegions(
   return regions;
 }
 
+/** Per-set logs in persisted form: one entry per movement (empty when none
+ * were logged), loads normalised to kg and rounded to two decimals. */
+export function persistedSets(
+  movements: SessionMovement[],
+  logs: Record<number, LoggedSet[]>,
+  unit: 'kg' | 'lb',
+): PersistedSet[][] {
+  const factor = unit === 'lb' ? LB_TO_KG : 1;
+  return movements.map((_, i) =>
+    (logs[i] ?? []).map((s) => ({ reps: s.reps, loadKg: Math.round(s.load * factor * 100) / 100 })),
+  );
+}
+
 export function buildSessionRecord(opts: {
   movements: SessionMovement[];
   logs: Record<number, LoggedSet[]>;
@@ -59,5 +72,6 @@ export function buildSessionRecord(opts: {
     setCount: Object.values(logs).flat().length,
     exerciseIds: movements.map((m) => m.id),
     regions: aggregateRegions(movements, logs),
+    sets: persistedSets(movements, logs, unit),
   };
 }
