@@ -10,9 +10,13 @@ export interface Routine {
   name: string;
   restSec: number;
   items: RoutineItem[];
+  /** ms epoch of the last user edit; absent = never touched (LWW loser). */
+  updatedAt?: number;
 }
 
 export interface SessionRecord {
+  /** Client-generated UUID — the append-only sync identity. */
+  id: string;
   date: string;
   name: string;
   durationSec: number;
@@ -29,6 +33,8 @@ export interface Profile {
   units: 'kg' | 'lb';
   defaultRestSec: number;
   memberSince: string;
+  /** ms epoch of the last user edit; absent = never touched (LWW loser). */
+  updatedAt?: number;
 }
 
 export interface Persisted {
@@ -74,34 +80,51 @@ export function defaults(): Persisted {
 }
 
 /** Read persisted state, falling back to defaults on missing or malformed data.
- * A partial object (e.g. from an older version) is merged over the defaults. */
+ * A partial object (e.g. from an older version) is merged over the defaults;
+ * history entries that predate the sync id field get a UUID assigned. */
 export function loadPersisted(): Persisted {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaults();
     const parsed = JSON.parse(raw) as Partial<Persisted>;
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults();
-    return { ...defaults(), ...parsed };
+    const merged = { ...defaults(), ...parsed };
+    return {
+      ...merged,
+      history: Array.isArray(merged.history)
+        ? merged.history.map((h) => (h.id ? h : { ...h, id: crypto.randomUUID() }))
+        : defaults().history,
+    };
   } catch {
     return defaults();
   }
 }
 
 /** Pure state transitions — the provider wraps each in setState. A mutation
- * returns its input unchanged (same reference) when there is nothing to do. */
+ * returns its input unchanged (same reference) when there is nothing to do.
+ * Mutations that edit the routine or profile stamp `updatedAt` for
+ * last-write-wins sync; `now` is injectable for tests. */
 export const mutations = {
-  setRoutine(d: Persisted, update: (r: Routine) => Routine): Persisted {
-    return { ...d, routine: update(d.routine) };
+  setRoutine(d: Persisted, update: (r: Routine) => Routine, now: number = Date.now()): Persisted {
+    return { ...d, routine: { ...update(d.routine), updatedAt: now } };
   },
-  addToRoutine(d: Persisted, id: string): Persisted {
+  addToRoutine(d: Persisted, id: string, now: number = Date.now()): Persisted {
     if (d.routine.items.some((i) => i.id === id)) return d;
     return {
       ...d,
-      routine: { ...d.routine, items: [...d.routine.items, { id, sets: '4', reps: '8-10' }] },
+      routine: {
+        ...d.routine,
+        items: [...d.routine.items, { id, sets: '4', reps: '8-10' }],
+        updatedAt: now,
+      },
     };
   },
-  removeFromRoutine(d: Persisted, id: string): Persisted {
-    return { ...d, routine: { ...d.routine, items: d.routine.items.filter((i) => i.id !== id) } };
+  removeFromRoutine(d: Persisted, id: string, now: number = Date.now()): Persisted {
+    if (!d.routine.items.some((i) => i.id === id)) return d;
+    return {
+      ...d,
+      routine: { ...d.routine, items: d.routine.items.filter((i) => i.id !== id), updatedAt: now },
+    };
   },
   pushRecent(d: Persisted, id: string): Persisted {
     if (d.recents[0] === id) return d;
@@ -116,8 +139,8 @@ export const mutations = {
   addSession(d: Persisted, rec: SessionRecord): Persisted {
     return { ...d, history: [rec, ...d.history] };
   },
-  setProfile(d: Persisted, patch: Partial<Profile>): Persisted {
-    return { ...d, profile: { ...d.profile, ...patch } };
+  setProfile(d: Persisted, patch: Partial<Profile>, now: number = Date.now()): Persisted {
+    return { ...d, profile: { ...d.profile, ...patch, updatedAt: now } };
   },
   togglePref(d: Persisted, index: number): Persisted {
     return { ...d, prefs: d.prefs.map((p, i) => (i === index ? !p : p)) };

@@ -46,9 +46,12 @@ export function buildSessionRecord(opts: {
   name: string;
   startMs: number;
   endMs: number;
+  /** Injectable for tests; defaults to a fresh UUID. */
+  id?: string;
 }): SessionRecord {
   const { movements, logs, unit, name, startMs, endMs } = opts;
   return {
+    id: opts.id ?? crypto.randomUUID(),
     date: new Date(endMs).toISOString(),
     name,
     durationSec: Math.round((endMs - startMs) / 1000),

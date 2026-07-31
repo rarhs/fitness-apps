@@ -16,6 +16,7 @@ const NOW = Date.UTC(2026, 6, 31, 12, 0, 0);
 
 function rec(daysAgo: number, overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
+    id: `s-${daysAgo}`,
     date: new Date(NOW - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
     name: 'Push A',
     durationSec: 3000,
