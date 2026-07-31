@@ -11,6 +11,9 @@ An npm-workspaces monorepo for fitness apps built on the **exercises-dataset** (
 - **`../exercises-dataset`** — the data source of truth (fork of hasaneyldrm/exercises-dataset, pushed to rarhs/exercises-dataset). Its GitHub Pages deployment is a free static API:
   - `https://rarhs.github.io/exercises-dataset/data/exercises.json` (full dataset, ~14 MB)
   - `https://rarhs.github.io/exercises-dataset/images/<id>-<media_id>.jpg` and `videos/<id>-<media_id>.gif`
+  - `…/setup.html` documents an alternative **self-hosted path** (unused by this monorepo today, relevant if an app ever wants exercises in its own DB, e.g. Supabase):
+    - `#db-setup`: `CREATE TABLE exercises` schemas for SQL Server / PostgreSQL / MySQL / SQLite, plus an in-browser "Generate INSERT SQL" button that downloads all 1,324 INSERTs. The SQL schema flattens the JSON — one `instructions_<lang>` column per language, `secondary_muscles` as JSONB/JSON/text — and **drops `instruction_steps` and `media_id`**. `image`/`gif_url` keep the same relative paths, so `imageUrl()`/`gifUrl()` still work against a DB import.
+    - `#api-integration`: snippets for `GET /exercises/:id`, `?page=&limit=`, `?category=&body_part=` — examples for an API **you'd host yourself** on top of that DB. GitHub Pages serves only static JSON + media; no such REST endpoints exist.
 - **`../workout-app`** — the first app (a Next.js 16 + Supabase tracker in its `tracker/` subdir, pushed to rarhs/workout-app). It predates this monorepo and may migrate into `apps/` later; don't assume it's here.
 
 ## Commands
@@ -25,7 +28,7 @@ npm run check      # tsc --noEmit across all workspaces
 
 The shared data layer. Key design decisions:
 
-- **Ships TypeScript source, no build step** — `exports` points at `src/index.ts`. Consuming apps must transpile it: Next.js needs `transpilePackages: ['@fitness-apps/exercise-data']` in `next.config`; Vite handles it out of the box.
+- **Ships TypeScript source, no build step** — `exports` points at `src/index.ts`. Consuming apps must transpile it: Next.js needs `transpilePackages: ['@fitness-apps/exercise-data']` in `next.config`; Vite handles it out of the box. If a build step ever becomes necessary (e.g. a consumer that can't transpile TS, or publishing the package outside the workspace), tell the user explicitly before adding one — don't introduce it silently.
 - **`src/generated/exercise-index.json` is generated AND committed** (by `npm run sync-data`) so clones work without syncing. Never edit it by hand; regenerate after any dataset change. It's the slim index — all record fields except instruction text — small enough to bundle.
 - **The full dataset is never bundled.** Instruction text is fetched at runtime via `fetchFullDataset()` / `fetchExercise()` (in-memory cached) from the Pages URL.
 - `sync-data` reads the local sibling checkout `../exercises-dataset/data/exercises.json` when present (fast, offline), else fetches the Pages URL; `--url` forces the deployed version.
