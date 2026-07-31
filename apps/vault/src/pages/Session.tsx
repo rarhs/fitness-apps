@@ -2,21 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { gifUrl, imageUrl } from '@fitness-apps/exercise-data';
 import { Media } from '../components/Media';
-import { LB_TO_KG, exerciseById, formatDuration, repsNumber, setsNumber } from '../lib';
-import { useAppState, type SessionRecord } from '../state';
+import { exerciseById, formatDuration, repsNumber, setsNumber } from '../lib';
+import { buildSessionRecord, targetReps, type LoggedSet } from '../session-math';
+import { useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
-
-interface LoggedSet {
-  reps: number;
-  load: number;
-}
-
-/** Trailing number of a reps target ("8-10" → "10") — the working prefill. */
-function targetReps(reps: string): string {
-  const m = reps.match(/(\d+)(?!.*\d)/);
-  return m ? m[1]! : '';
-}
 
 export function Session() {
   const navigate = useNavigate();
@@ -75,25 +65,14 @@ export function Session() {
   const unit = profile.units;
 
   const finish = (finalLogs: Record<number, LoggedSet[]>) => {
-    const allLogged = Object.values(finalLogs).flat();
-    const volumeKg = allLogged.reduce(
-      (sum, s) => sum + s.reps * s.load * (unit === 'lb' ? LB_TO_KG : 1),
-      0,
-    );
-    const regions: Record<string, number> = {};
-    for (const [idx, sets] of Object.entries(finalLogs)) {
-      const m = movements[Number(idx)];
-      if (m) regions[m.ex.body_part] = (regions[m.ex.body_part] ?? 0) + sets.length;
-    }
-    const rec: SessionRecord = {
-      date: new Date().toISOString(),
+    const rec = buildSessionRecord({
+      movements: movements.map((m) => ({ id: m.item.id, bodyPart: m.ex.body_part, setCount: m.setCount })),
+      logs: finalLogs,
+      unit,
       name: routine.name,
-      durationSec: Math.round((Date.now() - startTs) / 1000),
-      volumeKg: Math.round(volumeKg),
-      setCount: allLogged.length,
-      exerciseIds: movements.map((m) => m.item.id),
-      regions,
-    };
+      startMs: startTs,
+      endMs: Date.now(),
+    });
     addSession(rec);
     navigate('/progress');
   };

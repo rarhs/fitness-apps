@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "sync-data": "npm run sync-data --workspace @fitness-apps/exercise-data",
-    "check": "npm run check --workspaces --if-present"
+    "check": "npm run check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   },
   "engines": {
     "node": ">=18.17"

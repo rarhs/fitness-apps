@@ -1,22 +1,23 @@
 import { Link } from 'react-router';
+import {
+  WINDOW_WEEKS,
+  avgDurationMin,
+  distinctExerciseCount,
+  regionBalance,
+  splitWindows,
+  totalTonnageKg,
+  weeklyVolumes,
+} from '../history-math';
 import { TOTAL, fmt, formatDay } from '../lib';
-import { useAppState, type SessionRecord } from '../state';
+import { useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const WINDOW_WEEKS = 12;
-
-function inWindow(rec: SessionRecord, now: number, fromWeeks: number, toWeeks: number): boolean {
-  const age = now - new Date(rec.date).getTime();
-  return age >= fromWeeks * WEEK_MS && age < toWeeks * WEEK_MS;
-}
 
 export function Progress() {
   const { history } = useAppState();
   const now = Date.now();
 
-  const recent = history.filter((r) => inWindow(r, now, 0, WINDOW_WEEKS));
-  const prior = history.filter((r) => inWindow(r, now, WINDOW_WEEKS, WINDOW_WEEKS * 2));
+  const { recent, prior } = splitWindows(history, now);
 
   if (history.length === 0) {
     return (
@@ -37,14 +38,10 @@ export function Progress() {
     );
   }
 
-  const tonnage = (recs: SessionRecord[]) => recs.reduce((n, r) => n + r.volumeKg, 0);
-  const avgDur = (recs: SessionRecord[]) =>
-    recs.length === 0 ? 0 : recs.reduce((n, r) => n + r.durationSec, 0) / recs.length / 60;
-
-  const distinct = new Set(recent.flatMap((r) => r.exerciseIds)).size;
-  const durDelta = Math.round(avgDur(recent) - avgDur(prior));
-  const tonnageT = tonnage(recent) / 1000;
-  const priorT = tonnage(prior) / 1000;
+  const distinct = distinctExerciseCount(recent);
+  const durDelta = Math.round(avgDurationMin(recent) - avgDurationMin(prior));
+  const tonnageT = totalTonnageKg(recent) / 1000;
+  const priorT = totalTonnageKg(prior) / 1000;
 
   const stats = [
     {
@@ -62,7 +59,7 @@ export function Progress() {
     },
     {
       label: 'Avg. duration',
-      value: `${Math.round(avgDur(recent))} min`,
+      value: `${Math.round(avgDurationMin(recent))} min`,
       delta: prior.length > 0 ? `${durDelta >= 0 ? '+' : '−'}${Math.abs(durDelta)} min` : '—',
     },
     {
@@ -72,22 +69,10 @@ export function Progress() {
     },
   ];
 
-  const weekly = Array.from({ length: WINDOW_WEEKS }, (_, i) => {
-    const bucket = WINDOW_WEEKS - 1 - i; // weeks ago
-    const vol = history
-      .filter((r) => inWindow(r, now, bucket, bucket + 1))
-      .reduce((n, r) => n + r.volumeKg, 0);
-    return { label: `W${i + 1}`, vol };
-  });
+  const weekly = weeklyVolumes(history, now).map((vol, i) => ({ label: `W${i + 1}`, vol }));
   const maxVol = Math.max(...weekly.map((w) => w.vol), 1);
 
-  const regionTotals = new Map<string, number>();
-  for (const r of recent) {
-    for (const [name, sets] of Object.entries(r.regions)) {
-      regionTotals.set(name, (regionTotals.get(name) ?? 0) + sets);
-    }
-  }
-  const balance = [...regionTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const balance = regionBalance(recent);
   const maxSets = balance[0]?.[1] ?? 1;
 
   return (
