@@ -94,10 +94,15 @@ begin
     when insufficient_privilege then null; -- expected: WITH CHECK violation
   end;
 
-  -- 4. sessions are append-only: no update policy → 0 rows even for own rows
-  update public.sessions set name = 'rewritten history';
-  get diagnostics n = row_count;
-  if n <> 0 then raise exception 'FAIL: sessions are updatable (% rows) — append-only broken', n; end if;
+  -- 4. sessions are append-only: denied either by the missing UPDATE grant
+  -- (insufficient_privilege) or, failing that, by the absent policy (0 rows)
+  begin
+    update public.sessions set name = 'rewritten history';
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'FAIL: sessions are updatable (% rows) — append-only broken', n; end if;
+  exception
+    when insufficient_privilege then null; -- grant-level denial: even stronger
+  end;
 
   -- 5. deletes: own rows only
   delete from public.sessions where id = '33333333-0000-4000-8000-000000000003';
@@ -121,24 +126,38 @@ end $$;
 set local role anon;
 set local request.jwt.claims = '{"role": "anon"}';
 
+-- anon must be denied either at the grant level (insufficient_privilege) or,
+-- failing that, by having no policies (0 rows).
 do $$
 declare n bigint;
 begin
-  select count(*) into n from public.profiles;
-  if n <> 0 then raise exception 'FAIL: anon sees profiles'; end if;
-  select count(*) into n from public.routines;
-  if n <> 0 then raise exception 'FAIL: anon sees routines'; end if;
-  select count(*) into n from public.sessions;
-  if n <> 0 then raise exception 'FAIL: anon sees sessions'; end if;
-  select count(*) into n from public.saved_exercises;
-  if n <> 0 then raise exception 'FAIL: anon sees saved rows'; end if;
+  begin
+    select count(*) into n from public.profiles;
+    if n <> 0 then raise exception 'FAIL: anon sees profiles'; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.routines;
+    if n <> 0 then raise exception 'FAIL: anon sees routines'; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.sessions;
+    if n <> 0 then raise exception 'FAIL: anon sees sessions'; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.saved_exercises;
+    if n <> 0 then raise exception 'FAIL: anon sees saved rows'; end if;
+  exception when insufficient_privilege then null;
+  end;
 
   begin
     insert into public.saved_exercises (user_id, exercise_id)
     values ('a0000000-0000-4000-8000-00000000000a', '9999');
     raise exception 'FAIL: anon inserted a row';
   exception
-    when insufficient_privilege then null; -- expected: no anon policies
+    when insufficient_privilege then null; -- expected: no grant and no policy
   end;
 end $$;
 
