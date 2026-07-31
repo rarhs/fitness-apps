@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useAuth } from '../auth-context';
 import { initials, useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
@@ -13,6 +14,7 @@ const PREFS: { name: string; hint: string }[] = [
 
 export function Settings() {
   const navigate = useNavigate();
+  const { session, signOut } = useAuth();
   const { profile, setProfile, prefs, togglePref } = useAppState();
   const nameRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
@@ -132,8 +134,14 @@ export function Settings() {
         >
           {saved ? 'Saved ✓' : 'Save changes'}
         </button>
-        <button className="btn btn-secondary" onClick={() => navigate('/auth')}>
-          Sign out
+        <button
+          className="btn btn-secondary"
+          onClick={async () => {
+            if (session) await signOut();
+            navigate('/auth');
+          }}
+        >
+          {session ? 'Sign out' : 'Sign in'}
         </button>
       </div>
     </main>

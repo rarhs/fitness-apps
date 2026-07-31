@@ -1,18 +1,25 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EXERCISE_INDEX, imageUrl } from '@fitness-apps/exercise-data';
+import { useAuth } from '../auth-context';
 import { Media } from '../components/Media';
 import { MEDIA_COUNT, REGIONS, TOTAL, fmt } from '../lib';
-import { useAppState } from '../state';
 
 export function Auth() {
   const navigate = useNavigate();
-  const { setProfile } = useAppState();
-  const [email, setEmail] = useState('');
+  const { enabled, ready, session, signInWithGoogle } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const enter = () => {
-    if (email.trim()) setProfile({ email: email.trim() });
-    navigate('/');
+  const google = async () => {
+    setBusy(true);
+    setError(null);
+    const message = await signInWithGoogle();
+    // On success the browser navigates away; reaching here means it didn't.
+    if (message) {
+      setError(message);
+      setBusy(false);
+    }
   };
 
   return (
@@ -29,25 +36,29 @@ export function Auth() {
           The full catalogue is open to read. An account keeps your routines and logged sessions.
         </p>
         <div style={{ maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="field">
-            <label>Email</label>
-            <input
-              className="input"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') enter();
-              }}
-            />
-          </div>
-          <div className="field">
-            <label>Password</label>
-            <input className="input" type="password" placeholder="••••••••" />
-          </div>
-          <button className="btn btn-primary btn-block" onClick={enter}>
-            Continue
-          </button>
+          {session ? (
+            <>
+              <p style={{ margin: 0, fontSize: 14 }}>
+                Signed in as <strong>{session.user.email}</strong>
+              </p>
+              <button className="btn btn-primary btn-block" onClick={() => navigate('/')}>
+                Enter the vault →
+              </button>
+            </>
+          ) : enabled ? (
+            <>
+              <button className="btn btn-primary btn-block" onClick={google} disabled={busy || !ready}>
+                {busy ? 'Opening Google…' : 'Continue with Google'}
+              </button>
+              {error && (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--color-danger, #e5484d)' }}>{error}</p>
+              )}
+            </>
+          ) : (
+            <p className="text-muted" style={{ margin: 0, fontSize: 13 }}>
+              Sign-in is not configured in this build.
+            </p>
+          )}
           <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => navigate('/')}>
             Browse without an account →
           </button>
