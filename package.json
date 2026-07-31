@@ -1,0 +1,20 @@
+{
+  "name": "fitness-apps",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Monorepo of fitness apps built on the exercises-dataset",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "sync-data": "npm run sync-data --workspace @fitness-apps/exercise-data",
+    "check": "npm run check --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

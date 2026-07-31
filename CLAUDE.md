@@ -1,0 +1,45 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this repository is
+
+An npm-workspaces monorepo for fitness apps built on the **exercises-dataset** (1,324 exercises, multilingual instructions, 180×180 media). Apps live in `apps/` (empty until the first app lands); shared code lives in `packages/`.
+
+## Related repositories (siblings in `C:\Users\sagor\code`)
+
+- **`../exercises-dataset`** — the data source of truth (fork of hasaneyldrm/exercises-dataset, pushed to rarhs/exercises-dataset). Its GitHub Pages deployment is a free static API:
+  - `https://rarhs.github.io/exercises-dataset/data/exercises.json` (full dataset, ~14 MB)
+  - `https://rarhs.github.io/exercises-dataset/images/<id>-<media_id>.jpg` and `videos/<id>-<media_id>.gif`
+- **`../workout-app`** — the first app (a Next.js 16 + Supabase tracker in its `tracker/` subdir, pushed to rarhs/workout-app). It predates this monorepo and may migrate into `apps/` later; don't assume it's here.
+
+## Commands
+
+```powershell
+npm install        # once, at the repo root (workspaces)
+npm run sync-data  # regenerate the slim exercise index from the dataset
+npm run check      # tsc --noEmit across all workspaces
+```
+
+## packages/exercise-data
+
+The shared data layer. Key design decisions:
+
+- **Ships TypeScript source, no build step** — `exports` points at `src/index.ts`. Consuming apps must transpile it: Next.js needs `transpilePackages: ['@fitness-apps/exercise-data']` in `next.config`; Vite handles it out of the box.
+- **`src/generated/exercise-index.json` is generated AND committed** (by `npm run sync-data`) so clones work without syncing. Never edit it by hand; regenerate after any dataset change. It's the slim index — all record fields except instruction text — small enough to bundle.
+- **The full dataset is never bundled.** Instruction text is fetched at runtime via `fetchFullDataset()` / `fetchExercise()` (in-memory cached) from the Pages URL.
+- `sync-data` reads the local sibling checkout `../exercises-dataset/data/exercises.json` when present (fast, offline), else fetches the Pages URL; `--url` forces the deployed version.
+- Media URLs are built with `imageUrl()` / `gifUrl()` from `DEFAULT_MEDIA_BASE` — media files are never copied into this repo or its apps.
+
+## Licensing constraint (applies to every app)
+
+Dataset structure and instruction text are MIT, but **all exercise media is © Gym Visual, redistributed with permission at 180×180 only**. Every app UI that displays exercise images/GIFs must show the attribution (`DATASET_ATTRIBUTION` export: `© Gym visual — https://gymvisual.com/`), and media must never be upscaled, re-hosted at higher resolution, or stripped of attribution.
+
+## Adding an app
+
+Create `apps/<name>` as its own workspace package. Consume the data layer via `"@fitness-apps/exercise-data": "*"` in its dependencies (npm workspaces links it). Each app deploys independently (e.g. Vercel monorepo subdirectory).
+
+## Conventions
+
+- Never add Co-Authored-By to commit messages.
+- No remote exists yet. Once this repo is pushed to GitHub, follow the same workflow as the sibling repos: feature branch → PR → merge; never commit to `main` directly, and never merge a PR unless the user explicitly says to.

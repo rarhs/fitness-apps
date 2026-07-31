@@ -1,0 +1,14 @@
+{
+  "name": "@fitness-apps/exercise-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared data layer for the exercises-dataset: types, slim exercise index, media URL helpers, runtime dataset fetch",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "sync-data": "node scripts/sync-data.mjs",
+    "check": "tsc --noEmit"
+  }
+}
