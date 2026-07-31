@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   WINDOW_WEEKS,
   avgDurationMin,
@@ -14,6 +14,7 @@ import { useAppState } from '../state';
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
 
 export function Progress() {
+  const navigate = useNavigate();
   const { history } = useAppState();
   const now = Date.now();
 
@@ -43,7 +44,7 @@ export function Progress() {
   const tonnageT = totalTonnageKg(recent) / 1000;
   const priorT = totalTonnageKg(prior) / 1000;
 
-  const stats = [
+  const stats: { label: string; value: string; delta: string; to?: string }[] = [
     {
       label: 'Sessions',
       value: String(recent.length),
@@ -51,6 +52,7 @@ export function Progress() {
         prior.length > 0
           ? `${recent.length - prior.length >= 0 ? '+' : ''}${recent.length - prior.length} vs. prior 12 weeks`
           : 'first 12 weeks',
+      to: '/sessions',
     },
     {
       label: 'Total tonnage',
@@ -86,15 +88,26 @@ export function Progress() {
         className="stat-panel"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', borderRadius: 'var(--radius-md)', marginBottom: 40 }}
       >
-        {stats.map((s) => (
-          <div key={s.label} className="stat-cell">
-            <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: muted(55), marginBottom: 8 }}>
-              {s.label}
+        {stats.map((s) => {
+          const cell = (
+            <>
+              <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: muted(55), marginBottom: 8 }}>
+                {s.label}
+              </div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 30, letterSpacing: '-0.02em' }}>{s.value}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-accent-300)', marginTop: 4 }}>{s.delta}</div>
+            </>
+          );
+          return s.to ? (
+            <Link key={s.label} to={s.to} className="stat-cell" style={{ textDecoration: 'none', color: 'inherit' }}>
+              {cell}
+            </Link>
+          ) : (
+            <div key={s.label} className="stat-cell">
+              {cell}
             </div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 30, letterSpacing: '-0.02em' }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-accent-300)', marginTop: 4 }}>{s.delta}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <h6 style={{ color: muted(60), marginBottom: 14 }}>Weekly volume</h6>
@@ -142,8 +155,18 @@ export function Progress() {
               </tr>
             </thead>
             <tbody>
-              {history.slice(0, 6).map((s, i) => (
-                <tr key={i}>
+              {history.slice(0, 6).map((s) => (
+                <tr
+                  key={s.id}
+                  onClick={() => navigate(`/sessions/${s.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(`/sessions/${s.id}`);
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`${s.name}, ${formatDay(s.date)}`}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td>{formatDay(s.date)}</td>
                   <td>{s.name}</td>
                   <td>{s.volumeKg > 0 ? `${fmt(s.volumeKg)} kg` : '—'}</td>
@@ -152,6 +175,9 @@ export function Progress() {
               ))}
             </tbody>
           </table>
+          <Link className="btn btn-ghost" to="/sessions" style={{ marginTop: 10, marginLeft: -10 }}>
+            All sessions →
+          </Link>
         </div>
         <div>
           <h6 style={{ color: muted(60), marginBottom: 12 }}>Region balance</h6>

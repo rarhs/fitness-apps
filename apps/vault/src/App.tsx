@@ -10,6 +10,8 @@ import { Home } from './pages/Home';
 import { Library } from './pages/Library';
 import { Progress } from './pages/Progress';
 import { Session } from './pages/Session';
+import { SessionDetail } from './pages/SessionDetail';
+import { Sessions } from './pages/Sessions';
 import { Settings } from './pages/Settings';
 
 export function App() {
@@ -32,6 +34,8 @@ export function App() {
           <Route path="/builder" element={<Builder />} />
           <Route path="/session" element={<Session />} />
           <Route path="/progress" element={<Progress />} />
+          <Route path="/sessions" element={<Sessions />} />
+          <Route path="/sessions/:id" element={<SessionDetail />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="*" element={<Home />} />
