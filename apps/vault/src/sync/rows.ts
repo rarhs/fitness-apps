@@ -37,35 +37,73 @@ export interface ProfileRow {
  * - user_id is stamped on the way out and dropped on the way in.
  */
 
+const isoZ = (timestamptz: string): string => new Date(timestamptz).toISOString();
+
 export function sessionToRow(session: SessionRecord, userId: string): SessionRow {
-  void session;
-  void userId;
-  throw new Error('not implemented');
+  return {
+    id: session.id,
+    user_id: userId,
+    date: session.date,
+    name: session.name,
+    duration_sec: session.durationSec,
+    volume_kg: session.volumeKg,
+    set_count: session.setCount,
+    exercise_ids: session.exerciseIds,
+    regions: session.regions,
+  };
 }
 
 export function rowToSession(row: SessionRow): SessionRecord {
-  void row;
-  throw new Error('not implemented');
+  return {
+    id: row.id,
+    date: isoZ(row.date),
+    name: row.name,
+    durationSec: row.duration_sec,
+    volumeKg: row.volume_kg,
+    setCount: row.set_count,
+    exerciseIds: row.exercise_ids,
+    regions: row.regions,
+  };
 }
 
 export function routineToRow(routine: Routine, userId: string): RoutineRow {
-  void routine;
-  void userId;
-  throw new Error('not implemented');
+  return {
+    user_id: userId,
+    name: routine.name,
+    rest_sec: routine.restSec,
+    items: routine.items,
+    updated_at_ms: routine.updatedAt ?? 0,
+  };
 }
 
 export function rowToRoutine(row: RoutineRow): Routine {
-  void row;
-  throw new Error('not implemented');
+  return {
+    name: row.name,
+    restSec: row.rest_sec,
+    items: row.items,
+    ...(row.updated_at_ms > 0 ? { updatedAt: row.updated_at_ms } : {}),
+  };
 }
 
 export function profileToRow(profile: Profile, userId: string): ProfileRow {
-  void profile;
-  void userId;
-  throw new Error('not implemented');
+  return {
+    user_id: userId,
+    name: profile.name,
+    email: profile.email,
+    units: profile.units,
+    default_rest_sec: profile.defaultRestSec,
+    member_since: profile.memberSince,
+    updated_at_ms: profile.updatedAt ?? 0,
+  };
 }
 
 export function rowToProfile(row: ProfileRow): Profile {
-  void row;
-  throw new Error('not implemented');
+  return {
+    name: row.name,
+    email: row.email,
+    units: row.units,
+    defaultRestSec: row.default_rest_sec,
+    memberSince: isoZ(row.member_since),
+    ...(row.updated_at_ms > 0 ? { updatedAt: row.updated_at_ms } : {}),
+  };
 }
