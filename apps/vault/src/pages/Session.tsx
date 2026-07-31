@@ -184,23 +184,28 @@ export function Session() {
                     </>
                   ) : s.isCurrent ? (
                     <>
-                      <input
-                        className="input"
-                        value={repsVal}
-                        onChange={(e) => setRepsVal(e.target.value)}
-                        style={{ padding: 4, textAlign: 'center' }}
-                        inputMode="numeric"
-                        aria-label="Reps"
-                      />
-                      <input
-                        className="input"
-                        value={loadVal}
-                        onChange={(e) => setLoadVal(e.target.value)}
-                        placeholder={unit}
-                        style={{ padding: 4, textAlign: 'center' }}
-                        inputMode="decimal"
-                        aria-label={`Load (${unit})`}
-                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <input
+                          className="input"
+                          value={repsVal}
+                          onChange={(e) => setRepsVal(e.target.value)}
+                          style={{ padding: 4, textAlign: 'center', flex: 1, minWidth: 0 }}
+                          inputMode="numeric"
+                          aria-label="Reps"
+                        />
+                        <span style={{ fontSize: 12, color: muted(55), flex: 'none' }}>reps</span>
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <input
+                          className="input"
+                          value={loadVal}
+                          onChange={(e) => setLoadVal(e.target.value)}
+                          style={{ padding: 4, textAlign: 'center', flex: 1, minWidth: 0 }}
+                          inputMode="decimal"
+                          aria-label={`Load (${unit})`}
+                        />
+                        <span style={{ fontSize: 12, color: muted(55), flex: 'none' }}>{unit}</span>
+                      </span>
                       <span style={{ fontSize: 12, color: muted(55) }}>current</span>
                     </>
                   ) : (
