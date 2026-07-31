@@ -14,6 +14,12 @@ export interface Routine {
   updatedAt?: number;
 }
 
+/** One logged set as persisted: load normalised to kg at record-build time. */
+export interface PersistedSet {
+  reps: number;
+  loadKg: number;
+}
+
 export interface SessionRecord {
   /** Client-generated UUID — the append-only sync identity. */
   id: string;
@@ -25,6 +31,9 @@ export interface SessionRecord {
   exerciseIds: string[];
   /** Logged sets per body_part. */
   regions: Record<string, number>;
+  /** Per-set logs, index-aligned with exerciseIds (sets[i] belongs to
+   * exerciseIds[i]). Absent on records that predate set persistence. */
+  sets?: PersistedSet[][];
 }
 
 export interface Profile {

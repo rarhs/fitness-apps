@@ -20,6 +20,13 @@ const SESSION: SessionRecord = {
   setCount: 23,
   exerciseIds: ['0025', '0047'],
   regions: { chest: 12, shoulders: 11 },
+  sets: [
+    [
+      { reps: 10, loadKg: 80 },
+      { reps: 8, loadKg: 80 },
+    ],
+    [{ reps: 12, loadKg: 45.36 }],
+  ],
 };
 
 const ROUTINE: Routine = {
@@ -57,6 +64,18 @@ describe('session mapping', () => {
   it('ignores server-side extras like created_at', () => {
     const row = { ...sessionToRow(SESSION, USER), created_at: '2026-07-31T11:00:00Z' };
     expect(rowToSession(row)).toEqual(SESSION);
+  });
+
+  it('maps a legacy record without sets to an empty sets column', () => {
+    const { sets: _sets, ...legacy } = SESSION;
+    expect(sessionToRow(legacy, USER).sets).toEqual([]);
+  });
+
+  it('omits sets on the way in when the row carries none', () => {
+    const { sets: _sets, ...legacy } = SESSION;
+    const roundTripped = rowToSession(sessionToRow(legacy, USER));
+    expect('sets' in roundTripped).toBe(false);
+    expect(roundTripped).toEqual(legacy);
   });
 });
 

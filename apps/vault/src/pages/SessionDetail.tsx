@@ -32,7 +32,15 @@ export function SessionDetail() {
   }
 
   const when = new Date(rec.date);
-  const movements = rec.exerciseIds.map((exId) => ({ exId, ex: exerciseById(exId) }));
+  const movements = rec.exerciseIds.map((exId, i) => ({
+    exId,
+    ex: exerciseById(exId),
+    sets: rec.sets?.[i] ?? [],
+  }));
+  const setLine = (sets: { reps: number; loadKg: number }[]) =>
+    sets
+      .map((s) => (s.loadKg > 0 ? `${s.reps} × ${s.loadKg.toLocaleString('en-US')} kg` : `${s.reps} reps`))
+      .join('  ·  ');
   const regions = Object.entries(rec.regions).sort((a, b) => b[1] - a[1]);
   const maxSets = regions[0]?.[1] ?? 1;
 
@@ -72,7 +80,7 @@ export function SessionDetail() {
         <div>
           <h6 style={{ color: muted(60), marginBottom: 12 }}>Movements</h6>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {movements.map(({ exId, ex }, i) =>
+            {movements.map(({ exId, ex, sets }, i) =>
               ex ? (
                 <div key={`${exId}-${i}`} className="routine-row">
                   <span style={{ fontSize: 12, color: muted(40) }}>{pad2(i + 1)}</span>
@@ -91,6 +99,9 @@ export function SessionDetail() {
                     <span style={{ fontSize: 11, color: muted(50), textTransform: 'capitalize' }}>
                       {ex.body_part} · {ex.equipment}
                     </span>
+                    {sets.length > 0 && (
+                      <span style={{ fontSize: 12, color: muted(70), whiteSpace: 'pre' }}>{setLine(sets)}</span>
+                    )}
                   </div>
                 </div>
               ) : (
