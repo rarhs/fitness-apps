@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../auth-context';
 import { initials, useAppState } from '../state';
+import { useSync } from '../sync-context';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
 
@@ -15,6 +16,7 @@ const PREFS: { name: string; hint: string }[] = [
 export function Settings() {
   const navigate = useNavigate();
   const { session, signOut } = useAuth();
+  const { active, pending } = useSync();
   const { profile, setProfile, prefs, togglePref } = useAppState();
   const nameRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
@@ -46,6 +48,11 @@ export function Settings() {
           <div className="text-muted" style={{ fontSize: 13 }}>
             {profile.email || 'no email set'} · member since {memberYear}
           </div>
+          {active && (
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              {pending > 0 ? `${pending} change${pending === 1 ? '' : 's'} waiting to sync` : 'Synced to your account'}
+            </div>
+          )}
         </div>
         <button className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => nameRef.current?.focus()}>
           Edit

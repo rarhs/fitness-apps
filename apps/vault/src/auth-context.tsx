@@ -20,7 +20,7 @@ const Ctx = createContext<AuthState | null>(null);
 /** Owns the Supabase session. On sign-in, seeds the local profile from the
  * Google identity (see profilePatchForUser). Must sit inside AppStateProvider. */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { profile, setProfile } = useAppState();
+  const { profile, seedProfile } = useAppState();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(supabase === null);
 
@@ -28,8 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the effect doesn't resubscribe on every state change.
   const profileRef = useRef(profile);
   profileRef.current = profile;
-  const setProfileRef = useRef(setProfile);
-  setProfileRef.current = setProfile;
+  const seedProfileRef = useRef(seedProfile);
+  seedProfileRef.current = seedProfile;
 
   useEffect(() => {
     if (!supabase) return;
@@ -40,8 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
       if (event === 'SIGNED_IN' && next) {
+        // Seed, don't edit: the patch must not stamp updatedAt, or this
+        // device's defaults would win LWW over a profile edited elsewhere.
         const patch = profilePatchForUser(profileRef.current, next.user);
-        if (patch) setProfileRef.current(patch);
+        if (patch) seedProfileRef.current(patch);
       }
     });
     return () => data.subscription.unsubscribe();

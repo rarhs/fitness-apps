@@ -68,7 +68,7 @@ describe('opsForTransition', () => {
 
   it('puts the routine when it changed', () => {
     const prev = defaults();
-    const next = mutations.addToRoutine(prev, '0334', 1753960000000);
+    const next = mutations.setRoutine(prev, (r) => ({ ...r, restSec: 120 }), 1753960000000);
     expect(opsForTransition(prev, next)).toEqual([{ kind: 'put-routine', routine: next.routine }]);
   });
 
