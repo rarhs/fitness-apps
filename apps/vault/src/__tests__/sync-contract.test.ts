@@ -27,6 +27,13 @@ function session(id: string, date: string): SessionRecord {
     setCount: 23,
     exerciseIds: ['0025', '0047'],
     regions: { chest: 12, shoulders: 11 },
+    sets: [
+      [
+        { reps: 10, loadKg: 80 },
+        { reps: 8, loadKg: 77.5 },
+      ],
+      [{ reps: 12, loadKg: 0 }],
+    ],
   };
 }
 

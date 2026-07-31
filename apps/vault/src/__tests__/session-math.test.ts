@@ -96,4 +96,27 @@ describe('buildSessionRecord', () => {
     });
     expect(lbRec.volumeKg).toBe(454);
   });
+
+  it('persists per-set logs aligned with the movement order', () => {
+    expect(rec.sets).toEqual([
+      [
+        { reps: 10, loadKg: 80 },
+        { reps: 8, loadKg: 80 },
+      ],
+      [{ reps: 12, loadKg: 20 }],
+      [],
+    ]);
+  });
+
+  it('normalises set loads to kg, rounded to two decimals', () => {
+    const lbRec = buildSessionRecord({
+      movements: MOVEMENTS,
+      logs: { 0: [{ reps: 10, load: 100 }] },
+      unit: 'lb',
+      name: 'Push A',
+      startMs,
+      endMs,
+    });
+    expect(lbRec.sets).toEqual([[{ reps: 10, loadKg: 45.36 }], [], []]);
+  });
 });
