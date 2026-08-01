@@ -18,6 +18,55 @@ export function targetReps(reps: string): string {
   return m ? m[1]! : '';
 }
 
+/** The most recent session's logged sets for an exercise (by date, skipping
+ * legacy records and empty set lists), loads converted to the display unit
+ * and rounded to two decimals; null when it has no per-set history. */
+export function lastLoggedSets(
+  history: SessionRecord[],
+  exerciseId: string,
+  unit: 'kg' | 'lb',
+): { date: string; sets: LoggedSet[] } | null {
+  let best: { date: string; sets: PersistedSet[] } | null = null;
+  for (const rec of history) {
+    const idx = rec.exerciseIds.findIndex(
+      (id, i) => id === exerciseId && (rec.sets?.[i]?.length ?? 0) > 0,
+    );
+    if (idx === -1) continue;
+    if (!best || new Date(rec.date).getTime() > new Date(best.date).getTime()) {
+      best = { date: rec.date, sets: rec.sets![idx]! };
+    }
+  }
+  if (!best) return null;
+  const factor = unit === 'lb' ? 1 / LB_TO_KG : 1;
+  return {
+    date: best.date,
+    sets: best.sets.map((s) => ({ reps: s.reps, load: Math.round(s.loadKg * factor * 100) / 100 })),
+  };
+}
+
+/** "10×80, 8×80 kg" summary of logged sets — bodyweight sets show reps only,
+ * with a "reps" suffix when no set carried a load. */
+export function summarizeSets(sets: LoggedSet[], unit: string): string {
+  if (sets.length === 0) return '';
+  const body = sets.map((s) => (s.load > 0 ? `${s.reps}×${s.load}` : `${s.reps}`)).join(', ');
+  return sets.some((s) => s.load > 0) ? `${body} ${unit}` : `${body} reps`;
+}
+
+/** Prefill for the upcoming set's inputs: last time's same-numbered set wins;
+ * otherwise reps fall back to the routine target and load to the previous set
+ * logged this session (blank when neither exists). */
+export function setPrefill(
+  last: LoggedSet | undefined,
+  target: string,
+  prevLoad: number | undefined,
+): { reps: string; load: string } {
+  return {
+    reps: last ? String(last.reps) : targetReps(target),
+    load:
+      last && last.load > 0 ? String(last.load) : prevLoad !== undefined ? String(prevLoad) : '',
+  };
+}
+
 /** Total volume of logged sets, converted to kg when logged in pounds. */
 export function sessionVolumeKg(logs: Record<number, LoggedSet[]>, unit: 'kg' | 'lb'): number {
   const factor = unit === 'lb' ? LB_TO_KG : 1;

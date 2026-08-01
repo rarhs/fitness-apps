@@ -2,15 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { gifUrl, imageUrl } from '@fitness-apps/exercise-data';
 import { Media } from '../components/Media';
-import { exerciseById, formatDuration, repsNumber, setsNumber } from '../lib';
-import { buildSessionRecord, targetReps, type LoggedSet } from '../session-math';
+import { exerciseById, formatDay, formatDuration, repsNumber, setsNumber } from '../lib';
+import {
+  buildSessionRecord,
+  lastLoggedSets,
+  setPrefill,
+  summarizeSets,
+  type LoggedSet,
+} from '../session-math';
 import { useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
 
 export function Session() {
   const navigate = useNavigate();
-  const { routine, profile, addSession } = useAppState();
+  const { routine, profile, addSession, history } = useAppState();
+  const unit = profile.units;
 
   const movements = useMemo(
     () =>
@@ -33,14 +40,24 @@ export function Session() {
     return () => clearInterval(t);
   }, []);
 
+  const lastTimes = useMemo(
+    () => movements.map((m) => lastLoggedSets(history, m.item.id, unit)),
+    [movements, history, unit],
+  );
+
   const current = movements[movementIdx];
   const currentLogs = logs[movementIdx] ?? [];
   const currentSet = currentLogs.length;
 
   useEffect(() => {
     if (!current) return;
-    setRepsVal(targetReps(current.item.reps));
-    setLoadVal((logs[movementIdx] ?? []).slice(-1)[0]?.load.toString() ?? '');
+    const pre = setPrefill(
+      lastTimes[movementIdx]?.sets[currentSet],
+      current.item.reps,
+      (logs[movementIdx] ?? []).slice(-1)[0]?.load,
+    );
+    setRepsVal(pre.reps);
+    setLoadVal(pre.load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movementIdx, currentSet]);
 
@@ -62,7 +79,7 @@ export function Session() {
   const totalSets = movements.reduce((n, m) => n + m.setCount, 0);
   const loggedSets = Object.values(logs).reduce((n, l) => n + l.length, 0);
   const pct = Math.round((loggedSets / Math.max(totalSets, 1)) * 100);
-  const unit = profile.units;
+  const lastTime = lastTimes[movementIdx];
 
   const finish = (finalLogs: Record<number, LoggedSet[]>) => {
     const rec = buildSessionRecord({
@@ -96,7 +113,7 @@ export function Session() {
   const setRows = Array.from({ length: current.setCount }, (_, i) => {
     const logged = currentLogs[i];
     const isCurrent = i === currentSet;
-    return { n: i + 1, logged, isCurrent };
+    return { n: i + 1, logged, isCurrent, last: lastTime?.sets[i] };
   });
 
   return (
@@ -152,6 +169,11 @@ export function Session() {
             <h1 style={{ fontSize: 38, letterSpacing: '-0.03em', margin: '14px 0 20px', textTransform: 'capitalize' }}>
               {current.ex.name}
             </h1>
+            {lastTime && (
+              <p style={{ fontSize: 13, color: muted(55), margin: '-8px 0 20px' }}>
+                Last time · {formatDay(lastTime.date)} — {summarizeSets(lastTime.sets, unit)}
+              </p>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 26 }}>
               {setRows.map((s) => (
                 <div
@@ -207,6 +229,14 @@ export function Session() {
                         <span style={{ fontSize: 12, color: muted(55), flex: 'none' }}>{unit}</span>
                       </span>
                       <span style={{ fontSize: 12, color: muted(55) }}>current</span>
+                    </>
+                  ) : s.last ? (
+                    <>
+                      <span style={{ fontSize: 14 }}>{s.last.reps} reps</span>
+                      <span style={{ fontSize: 14, color: muted(55) }}>
+                        {s.last.load > 0 ? `${s.last.load} ${unit}` : '—'}
+                      </span>
+                      <span style={{ fontSize: 12, color: muted(55) }}>last time</span>
                     </>
                   ) : (
                     <>
