@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaults, initials, loadPersisted, mutations, type SessionRecord } from '../state';
+import {
+  activeRoutine,
+  defaults,
+  initials,
+  liveRoutines,
+  loadPersisted,
+  mutations,
+  SEED_ROUTINE_ID,
+  uniqueName,
+  type SessionRecord,
+} from '../state';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function stubStorage(raw: string | null) {
   vi.stubGlobal('localStorage', {
@@ -114,6 +126,166 @@ describe('mutations', () => {
     const next = mutations.setProfile(base, { units: 'lb' });
     expect(next.profile.units).toBe('lb');
     expect(next.profile.name).toBe(base.profile.name);
+  });
+});
+
+describe('routine collection', () => {
+  it('seeds one Starter Push routine under the nil id', () => {
+    const d = defaults();
+    expect(d.routines).toHaveLength(1);
+    expect(d.routines[0]).toMatchObject({ id: SEED_ROUTINE_ID, name: 'Starter Push' });
+    expect(d.activeRoutineId).toBe(SEED_ROUTINE_ID);
+    expect(activeRoutine(d)).toBe(d.routines[0]);
+    expect(liveRoutines(d)).toEqual(d.routines);
+  });
+
+  it('migrates a legacy single-routine payload under the nil id and activates it', () => {
+    const legacy = {
+      name: 'Push A',
+      restSec: 120,
+      items: [{ id: '0025', sets: '4', reps: '8-10' }],
+      updatedAt: 777,
+    };
+    stubStorage(JSON.stringify({ routine: legacy }));
+    const state = loadPersisted();
+    expect(state.routines).toEqual([{ ...legacy, id: SEED_ROUTINE_ID }]);
+    expect(state.activeRoutineId).toBe(SEED_ROUTINE_ID);
+    expect('routine' in state).toBe(false);
+  });
+
+  it('keeps a stored multi-routine shape as-is', () => {
+    const stored = {
+      routines: [
+        { id: SEED_ROUTINE_ID, name: 'Starter Push', restSec: 90, items: [] },
+        { id: 'r2', name: 'Pull day', restSec: 60, items: [], updatedAt: 5 },
+      ],
+      activeRoutineId: 'r2',
+    };
+    stubStorage(JSON.stringify(stored));
+    const state = loadPersisted();
+    expect(state.routines).toEqual(stored.routines);
+    expect(state.activeRoutineId).toBe('r2');
+  });
+
+  it('assigns ids to stored routines that lack one', () => {
+    stubStorage(JSON.stringify({ routines: [{ name: 'No id', restSec: 90, items: [] }] }));
+    expect(loadPersisted().routines[0]!.id).toMatch(UUID_RE);
+  });
+
+  it('re-targets a dangling or tombstoned activeRoutineId to the first live routine', () => {
+    stubStorage(
+      JSON.stringify({
+        routines: [
+          { id: 'dead', name: 'Old', restSec: 90, items: [], updatedAt: 1, deletedAt: 1 },
+          { id: 'live', name: 'Current', restSec: 90, items: [] },
+        ],
+        activeRoutineId: 'dead',
+      }),
+    );
+    expect(loadPersisted().activeRoutineId).toBe('live');
+  });
+
+  it('re-seeds when no live routine survives, keeping the tombstones', () => {
+    stubStorage(
+      JSON.stringify({
+        routines: [{ id: 'dead', name: 'Old', restSec: 90, items: [], updatedAt: 1, deletedAt: 1 }],
+        activeRoutineId: 'dead',
+      }),
+    );
+    const state = loadPersisted();
+    const live = liveRoutines(state);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.name).toBe('Starter Push');
+    expect(state.activeRoutineId).toBe(live[0]!.id);
+    expect(state.routines).toHaveLength(2);
+  });
+
+  it('addRoutine appends an empty routine, names it uniquely and activates it', () => {
+    const base = defaults();
+    const one = mutations.addRoutine(base, 100, 'r-a');
+    expect(one.routines).toHaveLength(2);
+    expect(one.activeRoutineId).toBe('r-a');
+    expect(activeRoutine(one)).toEqual({
+      id: 'r-a',
+      name: 'New routine',
+      restSec: base.profile.defaultRestSec,
+      items: [],
+      updatedAt: 100,
+    });
+    const two = mutations.addRoutine(one, 200, 'r-b');
+    expect(activeRoutine(two).name).toBe('New routine 2');
+  });
+
+  it('duplicateRoutine copies items and settings under a fresh id', () => {
+    const base = defaults();
+    const next = mutations.duplicateRoutine(base, SEED_ROUTINE_ID, 100, 'copy-1');
+    expect(next.routines).toHaveLength(2);
+    expect(next.activeRoutineId).toBe('copy-1');
+    expect(activeRoutine(next)).toEqual({
+      ...base.routines[0]!,
+      id: 'copy-1',
+      name: 'Starter Push copy',
+      updatedAt: 100,
+    });
+  });
+
+  it('duplicateRoutine no-ops on a missing or tombstoned source', () => {
+    const base = defaults();
+    expect(mutations.duplicateRoutine(base, 'nope', 100, 'x')).toBe(base);
+    const dead = mutations.deleteRoutine(mutations.addRoutine(base, 1, 'r-a'), 'r-a', 2);
+    expect(mutations.duplicateRoutine(dead, 'r-a', 100, 'x')).toBe(dead);
+  });
+
+  it('deleteRoutine tombstones, keeps the record and re-targets the active id', () => {
+    const two = mutations.addRoutine(defaults(), 100, 'r-a');
+    const next = mutations.deleteRoutine(two, 'r-a', 200);
+    expect(next.routines).toHaveLength(2);
+    expect(next.routines.find((r) => r.id === 'r-a')).toMatchObject({
+      deletedAt: 200,
+      updatedAt: 200,
+    });
+    expect(next.activeRoutineId).toBe(SEED_ROUTINE_ID);
+    expect(liveRoutines(next).map((r) => r.id)).toEqual([SEED_ROUTINE_ID]);
+  });
+
+  it('deleteRoutine refuses to remove the last live routine', () => {
+    const base = defaults();
+    expect(mutations.deleteRoutine(base, SEED_ROUTINE_ID, 100)).toBe(base);
+  });
+
+  it('deleteRoutine no-ops on missing or already dead ids', () => {
+    const two = mutations.addRoutine(defaults(), 1, 'r-a');
+    expect(mutations.deleteRoutine(two, 'nope', 2)).toBe(two);
+    const dead = mutations.deleteRoutine(two, 'r-a', 2);
+    expect(mutations.deleteRoutine(dead, 'r-a', 3)).toBe(dead);
+  });
+
+  it('selectRoutine switches only to live routines without stamping updatedAt', () => {
+    const two = mutations.addRoutine(defaults(), 100, 'r-a');
+    const back = mutations.selectRoutine(two, SEED_ROUTINE_ID);
+    expect(back.activeRoutineId).toBe(SEED_ROUTINE_ID);
+    expect(back.routines).toBe(two.routines);
+    expect(mutations.selectRoutine(back, 'nope')).toBe(back);
+    const dead = mutations.deleteRoutine(two, 'r-a', 200);
+    expect(mutations.selectRoutine(dead, 'r-a')).toBe(dead);
+  });
+
+  it('edit mutations touch only the active routine', () => {
+    const two = mutations.addRoutine(defaults(), 100, 'r-a');
+    const seedBefore = two.routines.find((r) => r.id === SEED_ROUTINE_ID);
+    const withItem = mutations.addToRoutine(two, '0001', 200);
+    expect(activeRoutine(withItem).items).toEqual([{ id: '0001', sets: '4', reps: '8-10' }]);
+    expect(withItem.routines.find((r) => r.id === SEED_ROUTINE_ID)).toBe(seedBefore);
+    const renamed = mutations.setRoutine(withItem, (r) => ({ ...r, name: 'Pull day' }), 300);
+    expect(activeRoutine(renamed)).toMatchObject({ id: 'r-a', name: 'Pull day', updatedAt: 300 });
+  });
+});
+
+describe('uniqueName', () => {
+  it('returns the base when free and appends a counter from 2', () => {
+    expect(uniqueName('New routine', [])).toBe('New routine');
+    expect(uniqueName('New routine', ['New routine'])).toBe('New routine 2');
+    expect(uniqueName('New routine', ['New routine', 'New routine 2'])).toBe('New routine 3');
   });
 });
 
