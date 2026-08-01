@@ -96,23 +96,31 @@ describe('opsForTransition', () => {
     expect(opsForTransition(prev, next)).toEqual([]);
   });
 
-  it('does not put non-nil routines (interim: local-only until the schema lands)', () => {
-    const prev = mutations.addRoutine(defaults(), 1, 'r-a');
-    const next = mutations.addToRoutine(prev, '0001', 2);
-    expect(opsForTransition(prev, next)).toEqual([]);
+  it('puts every new or edited routine, including non-nil ones', () => {
+    const prev = defaults();
+    const added = mutations.addRoutine(prev, 5, 'r-a');
+    expect(opsForTransition(prev, added)).toEqual([
+      { kind: 'put-routine', routine: activeRoutine(added) },
+    ]);
+    const edited = mutations.addToRoutine(added, '0001', 6);
+    expect(opsForTransition(added, edited)).toEqual([
+      { kind: 'put-routine', routine: activeRoutine(edited) },
+    ]);
   });
 
-  it('does not put a deleted nil routine (interim: deletion stays local)', () => {
-    const prev = mutations.addRoutine(defaults(), 1, 'r-a');
-    const next = mutations.deleteRoutine(prev, SEED_ROUTINE_ID, 2);
-    expect(opsForTransition(prev, next)).toEqual([]);
+  it('puts a deletion as a tombstoned routine', () => {
+    const prev = mutations.addRoutine(defaults(), 5, 'r-a');
+    const next = mutations.deleteRoutine(prev, SEED_ROUTINE_ID, 6);
+    expect(opsForTransition(prev, next)).toEqual([
+      { kind: 'put-routine', routine: next.routines.find((r) => r.id === SEED_ROUTINE_ID) },
+    ]);
   });
 });
 
 describe('planOps', () => {
   it('returns nothing for an empty plan', () => {
     const merged = defaults();
-    expect(planOps(merged, { sessions: [], routine: false, profile: false, saved: false })).toEqual([]);
+    expect(planOps(merged, { sessions: [], routines: [], profile: false, saved: false })).toEqual([]);
   });
 
   it('maps the plan to ops carrying the merged documents', () => {
@@ -121,7 +129,14 @@ describe('planOps', () => {
       history: [S2, S1],
       saved: ['0025'],
     };
-    expect(planOps(merged, { sessions: [S1, S2], routine: true, profile: true, saved: true })).toEqual([
+    expect(
+      planOps(merged, {
+        sessions: [S1, S2],
+        routines: [activeRoutine(merged)],
+        profile: true,
+        saved: true,
+      }),
+    ).toEqual([
       { kind: 'push-session', session: S1 },
       { kind: 'push-session', session: S2 },
       { kind: 'put-routine', routine: activeRoutine(merged) },
@@ -156,7 +171,7 @@ describe('SyncController', () => {
     const backend = new FakeBackend();
     backend.state = {
       sessions: [S2],
-      routine: null,
+      routines: [],
       profile: null,
       saved: ['0814'],
     };

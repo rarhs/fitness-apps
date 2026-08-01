@@ -15,7 +15,7 @@ import { SupabaseBackend } from '../sync/supabase-backend';
 const URL = process.env.SUPABASE_TEST_URL;
 const KEY = process.env.SUPABASE_TEST_ANON_KEY;
 
-const EMPTY = { sessions: [], routine: null, profile: null, saved: [] };
+const EMPTY = { sessions: [], routines: [], profile: null, saved: [] };
 
 function session(id: string, date: string): SessionRecord {
   return {
@@ -86,7 +86,7 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
 
     const state = await backend.fetchState();
     expect(state.profile).toEqual(profile);
-    expect(state.routine).toEqual(routine);
+    expect(state.routines).toEqual([routine]);
     expect([...state.saved].sort()).toEqual(['0025', '0334']);
     expect(state.sessions).toEqual([newer, older]); // newest first
   }, 15_000);
@@ -106,8 +106,18 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
     await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Push A', restSec: 90, items: [], updatedAt: 1 });
     await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Push B', restSec: 60, items: [], updatedAt: 2 });
     const state = await backend.fetchState();
-    expect(state.routine?.name).toBe('Push B');
-    expect(state.routine?.restSec).toBe(60);
+    expect(state.routines[0]?.name).toBe('Push B');
+    expect(state.routines[0]?.restSec).toBe(60);
+  }, 15_000);
+
+  it('interim: drops non-nil and tombstoned routine puts until the schema lands', async () => {
+    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Keep me', restSec: 90, items: [], updatedAt: 10 });
+    await backend.putRoutine({ id: crypto.randomUUID(), name: 'Local only', restSec: 60, items: [], updatedAt: 20 });
+    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Dead', restSec: 90, items: [], updatedAt: 30, deletedAt: 30 });
+    const state = await backend.fetchState();
+    expect(state.routines).toEqual([
+      { id: SEED_ROUTINE_ID, name: 'Keep me', restSec: 90, items: [], updatedAt: 10 },
+    ]);
   }, 15_000);
 
   it('makes the saved set equal to the given list', async () => {

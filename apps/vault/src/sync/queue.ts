@@ -17,8 +17,8 @@ function dispatch(backend: SyncBackend, op: SyncOp): Promise<void> {
 
 /** Offline write buffer. Writes queue here first and are replayed FIFO against
  * the backend; a failure keeps the failed op and everything after it for the
- * next flush. Document-style ops (routine/profile/saved) coalesce to the
- * latest value; session pushes coalesce by session id. */
+ * next flush. Document-style ops (profile/saved) coalesce to the latest value;
+ * session pushes coalesce by session id, routine puts by routine id. */
 export class SyncQueue {
   #ops: SyncOp[];
 
@@ -31,11 +31,15 @@ export class SyncQueue {
   }
 
   enqueue(op: SyncOp): void {
-    this.#ops = this.#ops.filter((existing) =>
-      op.kind === 'push-session'
-        ? !(existing.kind === 'push-session' && existing.session.id === op.session.id)
-        : existing.kind !== op.kind,
-    );
+    this.#ops = this.#ops.filter((existing) => {
+      if (op.kind === 'push-session') {
+        return !(existing.kind === 'push-session' && existing.session.id === op.session.id);
+      }
+      if (op.kind === 'put-routine') {
+        return !(existing.kind === 'put-routine' && existing.routine.id === op.routine.id);
+      }
+      return existing.kind !== op.kind;
+    });
     this.#ops.push(op);
   }
 

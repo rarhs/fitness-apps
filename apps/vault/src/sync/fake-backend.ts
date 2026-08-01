@@ -5,7 +5,7 @@ import type { RemoteState, SyncBackend } from './types';
  * told to fail specific calls by 1-based call number. Not shipped — only test
  * code imports it. */
 export class FakeBackend implements SyncBackend {
-  state: RemoteState = { sessions: [], routine: null, profile: null, saved: [] };
+  state: RemoteState = { sessions: [], routines: [], profile: null, saved: [] };
   calls: string[] = [];
   /** 1-based call numbers (across all methods) that should throw. */
   failOnCalls: number[] = [];
@@ -35,7 +35,9 @@ export class FakeBackend implements SyncBackend {
 
   async putRoutine(routine: Routine): Promise<void> {
     this.touch('putRoutine');
-    this.state.routine = routine;
+    const i = this.state.routines.findIndex((r) => r.id === routine.id);
+    if (i >= 0) this.state.routines[i] = routine;
+    else this.state.routines.push(routine);
   }
 
   async putProfile(profile: Profile): Promise<void> {

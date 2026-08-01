@@ -32,6 +32,17 @@ describe('coalescing', () => {
     ]);
   });
 
+  it('coalesces put-routine per routine id, keeping distinct routines', () => {
+    const q = new SyncQueue();
+    q.enqueue({ kind: 'put-routine', routine: routine('nil-v1') });
+    q.enqueue({ kind: 'put-routine', routine: { ...routine('other'), id: 'r-a' } });
+    q.enqueue({ kind: 'put-routine', routine: routine('nil-v2') });
+    expect(q.ops()).toEqual([
+      { kind: 'put-routine', routine: { ...routine('other'), id: 'r-a' } },
+      { kind: 'put-routine', routine: routine('nil-v2') },
+    ]);
+  });
+
   it('accumulates distinct sessions but replaces a re-queued id', () => {
     const q = new SyncQueue();
     q.enqueue({ kind: 'push-session', session: session('a') });
@@ -56,7 +67,7 @@ describe('flush', () => {
     expect(q.ops()).toEqual([]);
     expect(backend.calls).toEqual(['pushSessions', 'putRoutine', 'putSaved']);
     expect(backend.state.sessions.map((s) => s.id)).toEqual(['a']);
-    expect(backend.state.routine?.name).toBe('v1');
+    expect(backend.state.routines[0]?.name).toBe('v1');
     expect(backend.state.saved).toEqual(['0025']);
   });
 
@@ -83,7 +94,7 @@ describe('flush', () => {
     const second = await q.flush(backend);
     expect(second).toEqual({ flushed: 2, remaining: 0 });
     expect(backend.state.sessions.map((s) => s.id)).toEqual(['a', 'b']);
-    expect(backend.state.routine?.name).toBe('v1');
+    expect(backend.state.routines[0]?.name).toBe('v1');
   });
 });
 

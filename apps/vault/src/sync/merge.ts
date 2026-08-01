@@ -1,4 +1,4 @@
-import { SEED_ROUTINE_ID, type Persisted, type Profile, type Routine } from '../state';
+import { withLiveRoutine, type Persisted, type Profile, type Routine } from '../state';
 import type { MergeResult, RemoteState } from './types';
 
 const touched = (updatedAt?: number): boolean => (updatedAt ?? 0) > 0;
@@ -19,11 +19,12 @@ function lww<T extends Routine | Profile>(
  *
  * - Sessions are append-only facts keyed by client UUID: union both sides,
  *   newest first; local-only sessions go into the push plan.
- * - Routines: until the multi-routine schema lands, the backend stores exactly
- *   one routine per user — by the identity convention, the nil-id one. Only
- *   that document is last-write-wins merged; other local routines pass through
- *   local-only. A tombstoned winner is never pushed (the old schema cannot
- *   represent deletion); a strictly newer remote edit revives it.
+ * - Routines are a union by id with per-id last-write-wins. A tombstone
+ *   participates like any edit: a newer local deletion wins and is pushed; a
+ *   newer remote edit revives. Touched local-only routines are pushed; an
+ *   untouched local seed is discarded once the remote contributes anything;
+ *   remote-only routines are adopted. If nothing live survives, a fresh seed
+ *   is appended so the app never ends up without a routine.
  * - Profile is last-write-wins on `updatedAt` (absent = never touched = 0;
  *   ties go to remote). An untouched local default is never pushed over a
  *   missing remote.
@@ -38,21 +39,31 @@ export function mergeStates(local: Persisted, remote: RemoteState): MergeResult 
     (a, b) => b.date.localeCompare(a.date),
   );
 
-  const localNil = local.routines.find((r) => r.id === SEED_ROUTINE_ID);
-  const remoteNil = remote.routine ? { ...remote.routine, id: SEED_ROUTINE_ID } : null;
-  let routines = local.routines;
-  let pushRoutine = false;
-  if (localNil) {
-    const nil = lww(localNil, remoteNil);
-    routines = local.routines.map((r) => (r.id === SEED_ROUTINE_ID ? nil.value : r));
-    pushRoutine = nil.push && !nil.value.deletedAt;
-  } else if (remoteNil) {
-    routines = [...local.routines, remoteNil];
+  const remoteById = new Map(remote.routines.map((r) => [r.id, r]));
+  const localRoutineIds = new Set(local.routines.map((r) => r.id));
+  const kept: Routine[] = [];
+  const pushRoutines: Routine[] = [];
+  for (const l of local.routines) {
+    const r = remoteById.get(l.id);
+    if (r === undefined) {
+      if (!touched(l.updatedAt) && remote.routines.length > 0) continue;
+      kept.push(l);
+      if (touched(l.updatedAt)) pushRoutines.push(l);
+    } else if ((l.updatedAt ?? 0) > (r.updatedAt ?? 0)) {
+      kept.push(l);
+      pushRoutines.push(l);
+    } else {
+      kept.push(r);
+    }
   }
+  const routines = withLiveRoutine([
+    ...kept,
+    ...remote.routines.filter((r) => !localRoutineIds.has(r.id)),
+  ]);
   const live = routines.filter((r) => !r.deletedAt);
   const activeRoutineId = live.some((r) => r.id === local.activeRoutineId)
     ? local.activeRoutineId
-    : (live[0]?.id ?? local.activeRoutineId);
+    : live[0]!.id;
 
   const profile = lww(local.profile, remote.profile);
 
@@ -72,7 +83,7 @@ export function mergeStates(local: Persisted, remote: RemoteState): MergeResult 
     },
     push: {
       sessions: pushSessions,
-      routine: pushRoutine,
+      routines: pushRoutines,
       profile: profile.push,
       saved: pushSaved,
     },
