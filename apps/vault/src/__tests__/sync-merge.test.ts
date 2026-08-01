@@ -20,14 +20,14 @@ function session(id: string, daysAgo: number): SessionRecord {
 }
 
 function remote(partial: Partial<RemoteState> = {}): RemoteState {
-  return { sessions: [], routine: null, profile: null, saved: [], ...partial };
+  return { sessions: [], routines: [], profile: null, saved: [], ...partial };
 }
 
 function local(partial: Partial<Persisted> = {}): Persisted {
   return { ...defaults(), ...partial };
 }
 
-const NO_PUSH = { sessions: [], routine: false, profile: false, saved: false };
+const NO_PUSH = { sessions: [], routines: [], profile: false, saved: false };
 
 describe('first sign-in', () => {
   it('untouched local + empty remote: keep local, push nothing', () => {
@@ -48,7 +48,7 @@ describe('first sign-in', () => {
     expect(merged.history.map((h) => h.id)).toEqual(['a', 'b']);
     expect(activeRoutine(merged).restSec).toBe(120);
     expect(push.sessions.map((s) => s.id)).toEqual(['a', 'b']);
-    expect(push.routine).toBe(true);
+    expect(push.routines.map((r) => r.id)).toEqual([SEED_ROUTINE_ID]);
     expect(push.profile).toBe(true);
     expect(push.saved).toBe(true);
   });
@@ -56,7 +56,7 @@ describe('first sign-in', () => {
   it('adopts remote data onto a fresh device, pushing nothing', () => {
     const r = remote({
       sessions: [session('r1', 2)],
-      routine: { id: SEED_ROUTINE_ID, name: 'Pull B', restSec: 60, items: [], updatedAt: 100 },
+      routines: [{ id: SEED_ROUTINE_ID, name: 'Pull B', restSec: 60, items: [], updatedAt: 100 }],
       profile: { name: 'Rowan', email: 'r@x.com', units: 'lb', defaultRestSec: 60, memberSince: '2024-01-01T00:00:00.000Z', updatedAt: 100 },
       saved: ['0027'],
     });
@@ -85,29 +85,6 @@ describe('session union', () => {
 });
 
 describe('last-write-wins documents', () => {
-  const remoteRoutine = { id: SEED_ROUTINE_ID, name: 'Remote', restSec: 60, items: [], updatedAt: 1000 };
-
-  it('newer local routine wins and is pushed', () => {
-    const l = local({ routines: [{ ...defaults().routines[0]!, name: 'Local', updatedAt: 2000 }] });
-    const { merged, push } = mergeStates(l, remote({ routine: remoteRoutine }));
-    expect(activeRoutine(merged).name).toBe('Local');
-    expect(push.routine).toBe(true);
-  });
-
-  it('newer remote routine wins without a push', () => {
-    const l = local({ routines: [{ ...defaults().routines[0]!, name: 'Local', updatedAt: 500 }] });
-    const { merged, push } = mergeStates(l, remote({ routine: remoteRoutine }));
-    expect(activeRoutine(merged).name).toBe('Remote');
-    expect(push.routine).toBe(false);
-  });
-
-  it('breaks ties in favor of remote', () => {
-    const l = local({ routines: [{ ...defaults().routines[0]!, name: 'Local', updatedAt: 1000 }] });
-    const { merged, push } = mergeStates(l, remote({ routine: remoteRoutine }));
-    expect(activeRoutine(merged).name).toBe('Remote');
-    expect(push.routine).toBe(false);
-  });
-
   it('an untouched local default loses to any remote profile', () => {
     const remoteProfile = { name: 'Rowan', email: 'r@x.com', units: 'lb' as const, defaultRestSec: 60, memberSince: '2024-01-01T00:00:00.000Z', updatedAt: 1 };
     const { merged, push } = mergeStates(local(), remote({ profile: remoteProfile }));

@@ -120,7 +120,7 @@ describe('opsForTransition', () => {
 describe('planOps', () => {
   it('returns nothing for an empty plan', () => {
     const merged = defaults();
-    expect(planOps(merged, { sessions: [], routine: false, profile: false, saved: false })).toEqual([]);
+    expect(planOps(merged, { sessions: [], routines: [], profile: false, saved: false })).toEqual([]);
   });
 
   it('maps the plan to ops carrying the merged documents', () => {
@@ -129,7 +129,14 @@ describe('planOps', () => {
       history: [S2, S1],
       saved: ['0025'],
     };
-    expect(planOps(merged, { sessions: [S1, S2], routine: true, profile: true, saved: true })).toEqual([
+    expect(
+      planOps(merged, {
+        sessions: [S1, S2],
+        routines: [activeRoutine(merged)],
+        profile: true,
+        saved: true,
+      }),
+    ).toEqual([
       { kind: 'push-session', session: S1 },
       { kind: 'push-session', session: S2 },
       { kind: 'put-routine', routine: activeRoutine(merged) },
@@ -164,7 +171,7 @@ describe('SyncController', () => {
     const backend = new FakeBackend();
     backend.state = {
       sessions: [S2],
-      routine: null,
+      routines: [],
       profile: null,
       saved: ['0814'],
     };

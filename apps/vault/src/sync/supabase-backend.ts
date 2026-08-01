@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Profile, Routine, SessionRecord } from '../state';
+import { SEED_ROUTINE_ID, type Profile, type Routine, type SessionRecord } from '../state';
 import {
   profileToRow,
   routineToRow,
@@ -47,7 +47,7 @@ export class SupabaseBackend implements SyncBackend {
     if (firstError) throw firstError;
     return {
       sessions: ((sessions.data ?? []) as SessionRow[]).map(rowToSession),
-      routine: routine.data ? rowToRoutine(routine.data as RoutineRow) : null,
+      routines: routine.data ? [rowToRoutine(routine.data as RoutineRow)] : [],
       profile: profile.data ? rowToProfile(profile.data as ProfileRow) : null,
       saved: (saved.data ?? []).map((r) => (r as { exercise_id: string }).exercise_id),
     };
@@ -65,6 +65,12 @@ export class SupabaseBackend implements SyncBackend {
   }
 
   async putRoutine(routine: Routine): Promise<void> {
+    // Interim, until the multi-routine schema lands: the routines table is a
+    // singleton row per user with no id or deleted_at columns, so only the
+    // live nil-id document can be represented. Everything else is dropped
+    // HERE and only here — the layers above already speak full collection
+    // semantics, and this guard is what the schema slice deletes.
+    if (routine.id !== SEED_ROUTINE_ID || routine.deletedAt) return;
     const { error } = await this.client
       .from('routines')
       .upsert(routineToRow(routine, this.userId), { onConflict: 'user_id' });

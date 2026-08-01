@@ -1,9 +1,10 @@
 import type { Persisted, Profile, Routine, SessionRecord } from '../state';
 
-/** The user's data as the backend knows it. `null` means never written. */
+/** The user's data as the backend knows it. `null` means never written.
+ * `routines` includes tombstones — the merge needs them to sync deletions. */
 export interface RemoteState {
   sessions: SessionRecord[];
-  routine: Routine | null;
+  routines: Routine[];
   profile: Profile | null;
   saved: string[];
 }
@@ -12,7 +13,8 @@ export interface RemoteState {
 export interface PushPlan {
   /** Local sessions the remote doesn't have (append-only, keyed by id). */
   sessions: SessionRecord[];
-  routine: boolean;
+  /** Routine documents to write, tombstones included. */
+  routines: Routine[];
   profile: boolean;
   saved: boolean;
 }

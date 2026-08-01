@@ -76,6 +76,15 @@ export function activeRoutine(d: Persisted): Routine {
   return d.routines.find((r) => r.id === d.activeRoutineId && !r.deletedAt) ?? liveRoutines(d)[0]!;
 }
 
+/** `routines` unchanged while anything is live; otherwise a fresh seed is
+ * appended (under the nil id when free, else a new UUID) so the app and the
+ * merge never end up without a live routine. */
+export function withLiveRoutine(routines: Routine[]): Routine[] {
+  if (routines.some((r) => !r.deletedAt)) return routines;
+  const idTaken = routines.some((r) => r.id === SEED_ROUTINE_ID);
+  return [...routines, { ...DEFAULT_ROUTINE, ...(idTaken ? { id: crypto.randomUUID() } : {}) }];
+}
+
 /** `base` when no live routine uses it yet, else "base 2", "base 3", … */
 export function uniqueName(base: string, taken: string[]): string {
   if (!taken.includes(base)) return base;
@@ -134,15 +143,13 @@ export function loadPersisted(): Persisted {
     const { routine: legacyRoutine, ...rest } = parsed;
     const merged = { ...defaults(), ...rest };
 
-    const routines = Array.isArray(rest.routines)
-      ? rest.routines.map((r) => (r.id ? r : { ...r, id: crypto.randomUUID() }))
-      : legacyRoutine && typeof legacyRoutine === 'object'
-        ? [{ ...legacyRoutine, id: SEED_ROUTINE_ID }]
-        : defaults().routines;
-    if (!routines.some((r) => !r.deletedAt)) {
-      const idTaken = routines.some((r) => r.id === SEED_ROUTINE_ID);
-      routines.push({ ...DEFAULT_ROUTINE, ...(idTaken ? { id: crypto.randomUUID() } : {}) });
-    }
+    const routines = withLiveRoutine(
+      Array.isArray(rest.routines)
+        ? rest.routines.map((r) => (r.id ? r : { ...r, id: crypto.randomUUID() }))
+        : legacyRoutine && typeof legacyRoutine === 'object'
+          ? [{ ...legacyRoutine, id: SEED_ROUTINE_ID }]
+          : defaults().routines,
+    );
     const live = routines.filter((r) => !r.deletedAt);
     const activeRoutineId = live.some((r) => r.id === merged.activeRoutineId)
       ? merged.activeRoutineId

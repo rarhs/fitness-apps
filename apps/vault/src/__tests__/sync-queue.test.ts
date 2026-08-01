@@ -67,7 +67,7 @@ describe('flush', () => {
     expect(q.ops()).toEqual([]);
     expect(backend.calls).toEqual(['pushSessions', 'putRoutine', 'putSaved']);
     expect(backend.state.sessions.map((s) => s.id)).toEqual(['a']);
-    expect(backend.state.routine?.name).toBe('v1');
+    expect(backend.state.routines[0]?.name).toBe('v1');
     expect(backend.state.saved).toEqual(['0025']);
   });
 
@@ -94,7 +94,7 @@ describe('flush', () => {
     const second = await q.flush(backend);
     expect(second).toEqual({ flushed: 2, remaining: 0 });
     expect(backend.state.sessions.map((s) => s.id)).toEqual(['a', 'b']);
-    expect(backend.state.routine?.name).toBe('v1');
+    expect(backend.state.routines[0]?.name).toBe('v1');
   });
 });
 

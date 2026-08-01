@@ -1,16 +1,12 @@
-import { SEED_ROUTINE_ID, type Persisted, type Routine } from '../state';
+import type { Persisted } from '../state';
 import type { PushPlan, SyncOp } from './types';
 
 const changed = (a: unknown, b: unknown): boolean => JSON.stringify(a) !== JSON.stringify(b);
 
-/** The one routine the pre-multi-routine backend can hold: the live nil-id
- * document. Non-nil routines and deletions stay local until the schema lands. */
-const liveNil = (d: Persisted): Routine | undefined =>
-  d.routines.find((r) => r.id === SEED_ROUTINE_ID && !r.deletedAt);
-
 /** SyncOps a state transition implies. Sessions are matched by id (oldest
- * first, so replay order preserves history order); the nil routine, profile
- * and saved compare by value; recents, prefs and the active routine are
+ * first, so replay order preserves history order); routines are matched by id
+ * — a new, edited or tombstoned routine each becomes its own put; profile and
+ * saved compare by value; recents, prefs and the active routine are
  * device-local and never sync. */
 export function opsForTransition(prev: Persisted, next: Persisted): SyncOp[] {
   const ops: SyncOp[] = [];
@@ -18,8 +14,10 @@ export function opsForTransition(prev: Persisted, next: Persisted): SyncOp[] {
   for (const s of [...next.history].reverse()) {
     if (!known.has(s.id)) ops.push({ kind: 'push-session', session: s });
   }
-  const nextNil = liveNil(next);
-  if (nextNil && changed(liveNil(prev), nextNil)) ops.push({ kind: 'put-routine', routine: nextNil });
+  const prevById = new Map(prev.routines.map((r) => [r.id, r]));
+  for (const r of next.routines) {
+    if (changed(prevById.get(r.id), r)) ops.push({ kind: 'put-routine', routine: r });
+  }
   if (changed(prev.profile, next.profile)) ops.push({ kind: 'put-profile', profile: next.profile });
   if (changed(prev.saved, next.saved)) ops.push({ kind: 'put-saved', saved: next.saved });
   return ops;
@@ -28,8 +26,7 @@ export function opsForTransition(prev: Persisted, next: Persisted): SyncOp[] {
 /** Turn a merge's push plan into queueable ops carrying the merged documents. */
 export function planOps(merged: Persisted, push: PushPlan): SyncOp[] {
   const ops: SyncOp[] = push.sessions.map((session) => ({ kind: 'push-session' as const, session }));
-  const nil = liveNil(merged);
-  if (push.routine && nil) ops.push({ kind: 'put-routine', routine: nil });
+  for (const routine of push.routines) ops.push({ kind: 'put-routine', routine });
   if (push.profile) ops.push({ kind: 'put-profile', profile: merged.profile });
   if (push.saved) ops.push({ kind: 'put-saved', saved: merged.saved });
   return ops;
