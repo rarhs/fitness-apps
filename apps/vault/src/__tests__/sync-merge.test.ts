@@ -116,48 +116,85 @@ describe('last-write-wins documents', () => {
   });
 });
 
-/** Until the multi-routine schema lands, the backend stores exactly one
- * routine per user — by the identity convention, the nil-id one. Only that
- * document merges; other local routines stay local-only. */
-describe('interim nil-routine bridge', () => {
+/** Full collection semantics: union by id with per-id LWW (tombstones
+ * participate like any edit; ties go to remote), touched local-only routines
+ * pushed, untouched local seeds discarded once the remote contributes,
+ * remote-only routines adopted. */
+describe('routine collection merge', () => {
   const nil = (over: Partial<Routine> = {}): Routine => ({ ...defaults().routines[0]!, ...over });
-  const extra: Routine = { id: 'r-local', name: 'Pull day', restSec: 60, items: [], updatedAt: 50 };
-  const remoteNil: Routine = { id: SEED_ROUTINE_ID, name: 'Remote', restSec: 60, items: [], updatedAt: 1000 };
+  const mine = (over: Partial<Routine> = {}): Routine =>
+    ({ id: 'r-mine', name: 'Pull day', restSec: 60, items: [], updatedAt: 50, ...over });
+  const theirs = (over: Partial<Routine> = {}): Routine =>
+    ({ id: 'r-theirs', name: 'Leg day', restSec: 120, items: [], updatedAt: 60, ...over });
 
-  it('merges only the nil routine; other local routines pass through untouched', () => {
-    const l = local({ routines: [nil({ updatedAt: 500 }), extra], activeRoutineId: 'r-local' });
-    const { merged, push } = mergeStates(l, remote({ routine: remoteNil }));
-    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)?.name).toBe('Remote');
-    expect(merged.routines.find((r) => r.id === 'r-local')).toEqual(extra);
-    expect(merged.activeRoutineId).toBe('r-local');
-    expect(push.routine).toBe(false);
+  it('unions by id: touched local-only pushed, remote-only adopted', () => {
+    const l = local({ routines: [nil({ updatedAt: 500 }), mine()] });
+    const { merged, push } = mergeStates(
+      l,
+      remote({ routines: [nil({ name: 'Server', updatedAt: 400 }), theirs()] }),
+    );
+    expect(merged.routines.map((r) => r.id)).toEqual([SEED_ROUTINE_ID, 'r-mine', 'r-theirs']);
+    expect(merged.routines[0]!.updatedAt).toBe(500);
+    expect(push.routines.map((r) => r.id)).toEqual([SEED_ROUTINE_ID, 'r-mine']);
   });
 
-  it('pushes a newer local nil routine', () => {
-    const l = local({ routines: [nil({ name: 'Mine', updatedAt: 2000 }), extra] });
-    const { merged, push } = mergeStates(l, remote({ routine: remoteNil }));
-    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)?.name).toBe('Mine');
-    expect(push.routine).toBe(true);
-  });
-
-  it('keeps a locally deleted nil routine dead and never pushes the tombstone', () => {
-    const l = local({
-      routines: [nil({ updatedAt: 2000, deletedAt: 2000 }), extra],
-      activeRoutineId: 'r-local',
+  it('per-id LWW: newer remote wins without a push, ties go to remote', () => {
+    const l = local({ routines: [nil({ updatedAt: 500 }), mine({ updatedAt: 100 })] });
+    const r = remote({
+      routines: [nil({ name: 'Server', updatedAt: 500 }), mine({ name: 'Their pull', updatedAt: 200 })],
     });
-    const { merged, push } = mergeStates(l, remote({ routine: { ...remoteNil, updatedAt: 1000 } }));
-    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)?.deletedAt).toBe(2000);
-    expect(push.routine).toBe(false);
+    const { merged, push } = mergeStates(l, r);
+    expect(merged.routines.find((x) => x.id === SEED_ROUTINE_ID)?.name).toBe('Server');
+    expect(merged.routines.find((x) => x.id === 'r-mine')?.name).toBe('Their pull');
+    expect(push.routines).toEqual([]);
   });
 
-  it('a strictly newer remote edit revives a locally deleted nil routine', () => {
+  it('a newer local deletion wins and is pushed as a tombstone', () => {
+    const l = local({ routines: [nil({ updatedAt: 1 }), mine({ updatedAt: 300, deletedAt: 300 })] });
+    const r = remote({ routines: [mine({ updatedAt: 200 })] });
+    const { merged, push } = mergeStates(l, r);
+    expect(merged.routines.find((x) => x.id === 'r-mine')?.deletedAt).toBe(300);
+    expect(push.routines.map((x) => x.id)).toEqual([SEED_ROUTINE_ID, 'r-mine']);
+  });
+
+  it('a newer remote edit revives a locally deleted routine', () => {
+    const l = local({ routines: [nil({ updatedAt: 1 }), mine({ updatedAt: 300, deletedAt: 300 })] });
+    const r = remote({ routines: [mine({ name: 'Revived', updatedAt: 400 })] });
+    const { merged } = mergeStates(l, r);
+    expect(merged.routines.find((x) => x.id === 'r-mine')).toEqual(
+      mine({ name: 'Revived', updatedAt: 400 }),
+    );
+  });
+
+  it('a remote tombstone kills an older local edit and re-targets the active id', () => {
     const l = local({
-      routines: [nil({ updatedAt: 2000, deletedAt: 2000 }), extra],
-      activeRoutineId: 'r-local',
+      routines: [nil({ updatedAt: 1 }), mine({ updatedAt: 100 })],
+      activeRoutineId: 'r-mine',
     });
-    const { merged, push } = mergeStates(l, remote({ routine: { ...remoteNil, updatedAt: 3000 } }));
-    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)).toEqual({ ...remoteNil, updatedAt: 3000 });
-    expect(push.routine).toBe(false);
+    const r = remote({ routines: [mine({ updatedAt: 200, deletedAt: 200 })] });
+    const { merged, push } = mergeStates(l, r);
+    expect(merged.routines.find((x) => x.id === 'r-mine')?.deletedAt).toBe(200);
+    expect(merged.activeRoutineId).toBe(SEED_ROUTINE_ID);
+    expect(push.routines.map((x) => x.id)).toEqual([SEED_ROUTINE_ID]);
+  });
+
+  it('discards an untouched local seed when the remote contributes routines', () => {
+    const { merged, push } = mergeStates(local(), remote({ routines: [theirs()] }));
+    expect(merged.routines.map((r) => r.id)).toEqual(['r-theirs']);
+    expect(merged.activeRoutineId).toBe('r-theirs');
+    expect(push.routines).toEqual([]);
+  });
+
+  it('re-seeds a live routine when the remote tombstones every local one', () => {
+    const l = local({ routines: [nil({ updatedAt: 1 })] });
+    const r = remote({ routines: [nil({ updatedAt: 2, deletedAt: 2 })] });
+    const { merged, push } = mergeStates(l, r);
+    const live = merged.routines.filter((x) => !x.deletedAt);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.name).toBe('Starter Push');
+    expect(merged.activeRoutineId).toBe(live[0]!.id);
+    expect(merged.routines.find((x) => x.id === SEED_ROUTINE_ID)?.deletedAt).toBe(2);
+    expect(push.routines).toEqual([]);
   });
 });
 

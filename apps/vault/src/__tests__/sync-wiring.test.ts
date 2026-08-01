@@ -96,16 +96,24 @@ describe('opsForTransition', () => {
     expect(opsForTransition(prev, next)).toEqual([]);
   });
 
-  it('does not put non-nil routines (interim: local-only until the schema lands)', () => {
-    const prev = mutations.addRoutine(defaults(), 1, 'r-a');
-    const next = mutations.addToRoutine(prev, '0001', 2);
-    expect(opsForTransition(prev, next)).toEqual([]);
+  it('puts every new or edited routine, including non-nil ones', () => {
+    const prev = defaults();
+    const added = mutations.addRoutine(prev, 5, 'r-a');
+    expect(opsForTransition(prev, added)).toEqual([
+      { kind: 'put-routine', routine: activeRoutine(added) },
+    ]);
+    const edited = mutations.addToRoutine(added, '0001', 6);
+    expect(opsForTransition(added, edited)).toEqual([
+      { kind: 'put-routine', routine: activeRoutine(edited) },
+    ]);
   });
 
-  it('does not put a deleted nil routine (interim: deletion stays local)', () => {
-    const prev = mutations.addRoutine(defaults(), 1, 'r-a');
-    const next = mutations.deleteRoutine(prev, SEED_ROUTINE_ID, 2);
-    expect(opsForTransition(prev, next)).toEqual([]);
+  it('puts a deletion as a tombstoned routine', () => {
+    const prev = mutations.addRoutine(defaults(), 5, 'r-a');
+    const next = mutations.deleteRoutine(prev, SEED_ROUTINE_ID, 6);
+    expect(opsForTransition(prev, next)).toEqual([
+      { kind: 'put-routine', routine: next.routines.find((r) => r.id === SEED_ROUTINE_ID) },
+    ]);
   });
 });
 

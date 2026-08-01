@@ -32,6 +32,17 @@ describe('coalescing', () => {
     ]);
   });
 
+  it('coalesces put-routine per routine id, keeping distinct routines', () => {
+    const q = new SyncQueue();
+    q.enqueue({ kind: 'put-routine', routine: routine('nil-v1') });
+    q.enqueue({ kind: 'put-routine', routine: { ...routine('other'), id: 'r-a' } });
+    q.enqueue({ kind: 'put-routine', routine: routine('nil-v2') });
+    expect(q.ops()).toEqual([
+      { kind: 'put-routine', routine: { ...routine('other'), id: 'r-a' } },
+      { kind: 'put-routine', routine: routine('nil-v2') },
+    ]);
+  });
+
   it('accumulates distinct sessions but replaces a re-queued id', () => {
     const q = new SyncQueue();
     q.enqueue({ kind: 'push-session', session: session('a') });
