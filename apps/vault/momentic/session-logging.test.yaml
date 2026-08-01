@@ -1,0 +1,12 @@
+# Smoke: the live session screen — start, log one set, leave.
+# A full session (23 sets) would burn credits for no extra signal; one logged
+# set exercises the inputs, the set-row state machine and the progress header.
+fileType: momentic/test/v2
+id: session-logging
+description: A live session starts from the seeded routine and logs a set.
+steps:
+  - act: open the Routines page and start a session using the "Start session" button
+  - assert: the live session screen shows the first exercise with numbered set rows and inputs for reps and load
+  - act: log one set using the "Log set" button
+  - assert: set 1 is marked as logged
+  - act: leave the session using the Exit button

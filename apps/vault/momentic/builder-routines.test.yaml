@@ -1,0 +1,19 @@
+# Smoke: the routine manager (multi-routines slice 4).
+# Runs signed out on a fresh browser profile, so the seeded "Starter Push"
+# routine is present. Deleting is deliberately NOT exercised here: the delete
+# button sits behind a native window.confirm dialog, which is hostile to
+# automation; its state logic is covered by the unit suite.
+fileType: momentic/test/v2
+id: builder-routines
+description: The seeded routine renders and routines can be created, renamed, duplicated and switched.
+steps:
+  - act: open the Routines page from the navigation
+  - assert: a routine named "Starter Push" is shown with a list of movements
+  - act: create a new routine using the "+ New routine" control
+  - assert: a routine chip named "New routine" is selected and the editor shows no movements
+  - act: rename the active routine to "Smoke Pull" using the routine name field
+  - assert: the selected routine chip is now named "Smoke Pull"
+  - act: duplicate the active routine using the Duplicate button
+  - assert: a routine chip named "Smoke Pull copy" is selected
+  - act: switch back to the "Starter Push" routine by clicking its chip
+  - assert: the editor lists the Starter Push movements again
