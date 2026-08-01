@@ -36,6 +36,7 @@ jobs:
           MOMENTIC_API_KEY: ${{ secrets.MOMENTIC_API_KEY }}
         run: |
           npx --yes momentic install-browsers --all
-          npx --yes momentic run momentic \
+          npx --yes momentic run \
             --url-override "${{ github.event.deployment_status.environment_url }}" \
-            --retries 1
+            --retries 1 \
+            --upload-results
