@@ -3,7 +3,7 @@
  * SyncController that orchestrates fetch → merge → plan → queue → flush.
  * Framework-free — the React SyncProvider is a thin adapter over this. */
 import { describe, expect, it } from 'vitest';
-import { defaults, mutations, SEED_ROUTINE_ID, type Persisted, type SessionRecord } from '../state';
+import { activeRoutine, defaults, mutations, SEED_ROUTINE_ID, type Persisted, type SessionRecord } from '../state';
 import { SyncController } from '../sync/controller';
 import { FakeBackend } from '../sync/fake-backend';
 import { opsForTransition, planOps } from '../sync/ops';
@@ -69,7 +69,7 @@ describe('opsForTransition', () => {
   it('puts the routine when it changed', () => {
     const prev = defaults();
     const next = mutations.setRoutine(prev, (r) => ({ ...r, restSec: 120 }), 1753960000000);
-    expect(opsForTransition(prev, next)).toEqual([{ kind: 'put-routine', routine: next.routine }]);
+    expect(opsForTransition(prev, next)).toEqual([{ kind: 'put-routine', routine: activeRoutine(next) }]);
   });
 
   it('puts the profile when it changed', () => {
@@ -124,7 +124,7 @@ describe('planOps', () => {
     expect(planOps(merged, { sessions: [S1, S2], routine: true, profile: true, saved: true })).toEqual([
       { kind: 'push-session', session: S1 },
       { kind: 'push-session', session: S2 },
-      { kind: 'put-routine', routine: merged.routine },
+      { kind: 'put-routine', routine: activeRoutine(merged) },
       { kind: 'put-profile', profile: merged.profile },
       { kind: 'put-saved', saved: ['0025'] },
     ]);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildSessionRecord, type LoggedSet, type SessionMovement } from '../session-math';
-import { defaults, loadPersisted, mutations } from '../state';
+import { activeRoutine, defaults, loadPersisted, mutations } from '../state';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -67,20 +67,20 @@ describe('last-write-wins stamps', () => {
   const base = defaults();
 
   it('starts untouched: defaults carry no updatedAt', () => {
-    expect(base.routine.updatedAt).toBeUndefined();
+    expect(activeRoutine(base).updatedAt).toBeUndefined();
     expect(base.profile.updatedAt).toBeUndefined();
   });
 
   it('stamps the routine on add, remove and edit', () => {
-    expect(mutations.addToRoutine(base, '0001', 1234).routine.updatedAt).toBe(1234);
-    expect(mutations.removeFromRoutine(base, '0025', 2345).routine.updatedAt).toBe(2345);
-    expect(mutations.setRoutine(base, (r) => ({ ...r, restSec: 120 }), 3456).routine.updatedAt).toBe(3456);
+    expect(activeRoutine(mutations.addToRoutine(base, '0001', 1234)).updatedAt).toBe(1234);
+    expect(activeRoutine(mutations.removeFromRoutine(base, '0025', 2345)).updatedAt).toBe(2345);
+    expect(activeRoutine(mutations.setRoutine(base, (r) => ({ ...r, restSec: 120 }), 3456)).updatedAt).toBe(3456);
   });
 
   it('does not stamp on a no-op duplicate add', () => {
     const once = mutations.addToRoutine(base, '0001', 1000);
     expect(mutations.addToRoutine(once, '0001', 2000)).toBe(once);
-    expect(once.routine.updatedAt).toBe(1000);
+    expect(activeRoutine(once).updatedAt).toBe(1000);
   });
 
   it('stamps the profile on edit', () => {
@@ -91,7 +91,7 @@ describe('last-write-wins stamps', () => {
 
   it('leaves sessions and saved unstamped — they merge without timestamps', () => {
     const next = mutations.toggleSaved(base, '0001');
-    expect(next.routine.updatedAt).toBeUndefined();
+    expect(activeRoutine(next).updatedAt).toBeUndefined();
     expect(next.profile.updatedAt).toBeUndefined();
   });
 });

@@ -40,18 +40,18 @@ describe('loadPersisted', () => {
 
   it('survives malformed JSON and non-object payloads', () => {
     stubStorage('{not json');
-    expect(loadPersisted().routine.name).toBe('Push A');
+    expect(activeRoutine(loadPersisted()).name).toBe('Starter Push');
     stubStorage('"just a string"');
-    expect(loadPersisted().routine.name).toBe('Push A');
+    expect(activeRoutine(loadPersisted()).name).toBe('Starter Push');
     stubStorage('[1,2,3]');
-    expect(loadPersisted().routine.name).toBe('Push A');
+    expect(activeRoutine(loadPersisted()).name).toBe('Starter Push');
   });
 
   it('merges a partial (older-version) payload over the defaults', () => {
     stubStorage(JSON.stringify({ recents: ['0001'] }));
     const state = loadPersisted();
     expect(state.recents).toEqual(['0001']);
-    expect(state.routine.items).toHaveLength(6);
+    expect(activeRoutine(state).items).toHaveLength(6);
     expect(state.prefs).toEqual([true, false, true, true]);
   });
 
@@ -61,7 +61,7 @@ describe('loadPersisted', () => {
         throw new Error('denied');
       },
     });
-    expect(loadPersisted().routine.name).toBe('Push A');
+    expect(activeRoutine(loadPersisted()).name).toBe('Starter Push');
   });
 });
 
@@ -70,14 +70,14 @@ describe('mutations', () => {
 
   it('addToRoutine appends with default sets/reps and dedupes by reference', () => {
     const next = mutations.addToRoutine(base, '0001');
-    expect(next.routine.items.at(-1)).toEqual({ id: '0001', sets: '4', reps: '8-10' });
+    expect(activeRoutine(next).items.at(-1)).toEqual({ id: '0001', sets: '4', reps: '8-10' });
     expect(mutations.addToRoutine(next, '0001')).toBe(next);
   });
 
   it('removeFromRoutine drops only the matching item', () => {
     const next = mutations.removeFromRoutine(base, '0025');
-    expect(next.routine.items.map((i) => i.id)).not.toContain('0025');
-    expect(next.routine.items).toHaveLength(base.routine.items.length - 1);
+    expect(activeRoutine(next).items.map((i) => i.id)).not.toContain('0025');
+    expect(activeRoutine(next).items).toHaveLength(activeRoutine(base).items.length - 1);
   });
 
   it('pushRecent moves to front, dedupes, caps at 10, and no-ops when already first', () => {

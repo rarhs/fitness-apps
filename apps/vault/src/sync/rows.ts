@@ -1,4 +1,4 @@
-import type { PersistedSet, Profile, Routine, RoutineItem, SessionRecord } from '../state';
+import { SEED_ROUTINE_ID, type PersistedSet, type Profile, type Routine, type RoutineItem, type SessionRecord } from '../state';
 
 /** Row shapes as PostgREST serializes them (see supabase/migrations). */
 export interface SessionRow {
@@ -83,6 +83,9 @@ export function routineToRow(routine: Routine, userId: string): RoutineRow {
 
 export function rowToRoutine(row: RoutineRow): Routine {
   return {
+    // The singleton row predates routine ids — it is the nil-id document by
+    // the identity convention (routineToRow drops the id symmetrically).
+    id: SEED_ROUTINE_ID,
     name: row.name,
     restSec: row.rest_sec,
     items: row.items,

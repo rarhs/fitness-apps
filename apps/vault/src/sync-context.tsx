@@ -38,14 +38,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const data = useMemo<Persisted>(
     () => ({
-      routine: app.routine,
+      routines: app.routines,
+      activeRoutineId: app.activeRoutineId,
       recents: app.recents,
       saved: app.saved,
       history: app.history,
       profile: app.profile,
       prefs: app.prefs,
     }),
-    [app.routine, app.recents, app.saved, app.history, app.profile, app.prefs],
+    [app.routines, app.activeRoutineId, app.recents, app.saved, app.history, app.profile, app.prefs],
   );
   const dataRef = useRef(data);
   dataRef.current = data;
