@@ -2,7 +2,7 @@
 # No `url` here (or in any test in this suite) — the base URL comes from
 # `--url-override`, so the same tests run against previews, prod or localhost.
 fileType: momentic/test/v2
-id: home-loads
+id: home-page-loads
 description: The home page renders the exercise library app and the Gym Visual media attribution.
 steps:
   - assert: the page is a fitness exercise library app called Vault

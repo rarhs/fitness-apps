@@ -2,7 +2,7 @@
 # A full session (23 sets) would burn credits for no extra signal; one logged
 # set exercises the inputs, the set-row state machine and the progress header.
 fileType: momentic/test/v2
-id: session-logging
+id: live-session-logging
 description: A live session starts from the seeded routine and logs a set.
 steps:
   - act: open the Routines page and start a session using the "Start session" button

@@ -4,7 +4,7 @@
 # button sits behind a native window.confirm dialog, which is hostile to
 # automation; its state logic is covered by the unit suite.
 fileType: momentic/test/v2
-id: builder-routines
+id: builder-routine-manager
 description: The seeded routine renders and routines can be created, renamed, duplicated and switched.
 steps:
   - act: open the Routines page from the navigation
