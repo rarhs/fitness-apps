@@ -6,7 +6,7 @@ Design constraints:
 
 - **Signed out only.** Google OAuth is impractical to automate, and Vault is local-first — a fresh browser profile sees the seeded "Starter Push" routine, which is exactly what these tests assert against. Never point a signed-in profile at these: routine mutations would sync to the real account.
 - **No `url` in any test.** The base URL always comes from `--url-override`, so the same suite targets previews, production, or a dev server.
-- **No `momentic.config.yaml` committed.** `momentic run <dir>` works without one; if the wizard/editor adds one later, keep it minimal.
+- **`momentic.config.yaml` (in `apps/vault/`) stays minimal.** The CLI requires the project file to run at all, but the base URL is never set in it — `--url-override` decides the target per run.
 - The routine **delete** flow is not covered here (native `window.confirm` blocks automation); its logic lives in the unit suite.
 
 ## One-time setup (account owner)
