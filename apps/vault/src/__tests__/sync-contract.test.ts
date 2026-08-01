@@ -110,13 +110,22 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
     expect(state.routines[0]?.restSec).toBe(60);
   }, 15_000);
 
-  it('interim: drops non-nil and tombstoned routine puts until the schema lands', async () => {
-    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Keep me', restSec: 90, items: [], updatedAt: 10 });
-    await backend.putRoutine({ id: crypto.randomUUID(), name: 'Local only', restSec: 60, items: [], updatedAt: 20 });
-    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Dead', restSec: 90, items: [], updatedAt: 30, deletedAt: 30 });
+  it('round-trips a routine collection keyed by id, tombstones included', async () => {
+    const otherId = crypto.randomUUID();
+    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Starter', restSec: 90, items: [], updatedAt: 10 });
+    await backend.putRoutine({
+      id: otherId,
+      name: 'Pull day',
+      restSec: 60,
+      items: [{ id: '0027', sets: '3', reps: '10' }],
+      updatedAt: 20,
+    });
+    // Same id re-put as a tombstone: replaced in place, never duplicated.
+    await backend.putRoutine({ id: otherId, name: 'Pull day', restSec: 60, items: [], updatedAt: 30, deletedAt: 30 });
     const state = await backend.fetchState();
     expect(state.routines).toEqual([
-      { id: SEED_ROUTINE_ID, name: 'Keep me', restSec: 90, items: [], updatedAt: 10 },
+      { id: SEED_ROUTINE_ID, name: 'Starter', restSec: 90, items: [], updatedAt: 10 },
+      { id: otherId, name: 'Pull day', restSec: 60, items: [], updatedAt: 30, deletedAt: 30 },
     ]);
   }, 15_000);
 

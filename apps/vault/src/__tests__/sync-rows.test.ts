@@ -91,6 +91,27 @@ describe('routine mapping', () => {
     expect(rowToRoutine(routineToRow(untouched, USER)).updatedAt).toBeUndefined();
   });
 
+  it('carries a non-nil id and the tombstone through the row shape', () => {
+    const dead: Routine = {
+      id: '7d9e4a10-0000-4000-8000-000000000042',
+      name: 'Old pull',
+      restSec: 60,
+      items: [],
+      updatedAt: 5,
+      deletedAt: 9,
+    };
+    const row = routineToRow(dead, USER);
+    expect(row.id).toBe(dead.id);
+    expect(row.deleted_at_ms).toBe(9);
+    expect(rowToRoutine(row)).toEqual(dead);
+  });
+
+  it('maps the tombstone clock: absent deletedAt ↔ 0', () => {
+    const row = routineToRow(ROUTINE, USER);
+    expect(row.deleted_at_ms).toBe(0);
+    expect('deletedAt' in rowToRoutine(row)).toBe(false);
+  });
+
   it('carries items as-is', () => {
     expect(routineToRow(ROUTINE, USER).items).toEqual(ROUTINE.items);
   });
