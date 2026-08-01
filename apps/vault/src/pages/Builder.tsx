@@ -1,15 +1,29 @@
+import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import { imageUrl } from '@fitness-apps/exercise-data';
 import { Media } from '../components/Media';
 import { exerciseById, pad2, setsNumber } from '../lib';
-import { useAppState } from '../state';
+import { liveRoutines, useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
 const WORK_SEC_PER_SET = 40;
 
+const chipStyle = (active: boolean): CSSProperties => ({
+  padding: '7px 15px',
+  borderRadius: 999,
+  fontSize: 13,
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+  color: 'var(--color-text)',
+  border: `1px solid ${active ? 'var(--color-accent-700)' : 'var(--color-divider)'}`,
+  background: active ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
+});
+
 export function Builder() {
   const navigate = useNavigate();
-  const { routine, setRoutine, removeFromRoutine } = useAppState();
+  const app = useAppState();
+  const { routine, activeRoutineId, setRoutine, removeFromRoutine, addRoutine, duplicateRoutine, deleteRoutine, selectRoutine } = app;
+  const live = liveRoutines(app);
 
   const rows = routine.items
     .map((item, i) => ({ item, i, ex: exerciseById(item.id) }))
@@ -45,9 +59,27 @@ export function Builder() {
       <div className="vsplit" style={{ gridTemplateColumns: 'minmax(0, 1fr) 360px' }}>
         <section>
           <h1 style={{ fontSize: 36, letterSpacing: '-0.025em', margin: '0 0 6px' }}>Routine editor</h1>
-          <p className="text-muted" style={{ margin: '0 0 26px' }}>
+          <p className="text-muted" style={{ margin: '0 0 18px' }}>
             {routine.name} · {rows.length} movements · est. {estMin} minutes
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 0 22px' }}>
+            {live.map((r) => (
+              <button
+                key={r.id}
+                style={chipStyle(r.id === activeRoutineId)}
+                onClick={() => selectRoutine(r.id)}
+                aria-pressed={r.id === activeRoutineId}
+              >
+                {r.name}
+              </button>
+            ))}
+            <button
+              style={{ ...chipStyle(false), color: muted(60), borderStyle: 'dashed' }}
+              onClick={addRoutine}
+            >
+              + New routine
+            </button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rows.map(({ item, i, ex }) => (
               <div key={item.id} className="routine-row">
@@ -154,6 +186,14 @@ export function Builder() {
             </div>
           </div>
           <div className="field">
+            <label>Routine name</label>
+            <input
+              className="input"
+              value={routine.name}
+              onChange={(e) => setRoutine((r) => ({ ...r, name: e.target.value }))}
+            />
+          </div>
+          <div className="field">
             <label>Rest between sets (seconds)</label>
             <input
               className="input"
@@ -164,6 +204,24 @@ export function Builder() {
               }}
               inputMode="numeric"
             />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => duplicateRoutine(routine.id)}>
+              Duplicate
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ flex: 1 }}
+              disabled={live.length <= 1}
+              title={live.length <= 1 ? 'The last routine cannot be deleted' : undefined}
+              onClick={() => {
+                if (window.confirm(`Delete "${routine.name}"? Its logged sessions stay in your history.`)) {
+                  deleteRoutine(routine.id);
+                }
+              }}
+            >
+              Delete
+            </button>
           </div>
           <button className="btn btn-primary btn-block" onClick={() => navigate('/session')} disabled={rows.length === 0}>
             Start session
