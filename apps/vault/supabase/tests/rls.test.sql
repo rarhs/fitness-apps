@@ -7,14 +7,18 @@
 -- final SELECT means every check passed.
 --
 -- Invariants under test:
---   1. A user sees exactly their own rows in all four tables.
---   2. A user can update their own profile/routine but writes against another
---      user's rows affect 0 rows.
---   3. Session inserts are only accepted for the caller's own user_id;
---      forging another user_id violates WITH CHECK.
+--   1. A user sees exactly their own rows in all four tables — including
+--      every routine of their multi-routine collection, and none of anyone
+--      else's.
+--   2. A user can update their own profile/routines (per-id under the
+--      composite (user_id, id) key, tombstoning included) but writes against
+--      another user's rows affect 0 rows.
+--   3. Session and routine inserts are only accepted for the caller's own
+--      user_id; forging another user_id violates WITH CHECK.
 --   4. Sessions are append-only for clients: no UPDATE policy exists, so
 --      updates affect 0 rows even on the caller's own sessions.
---   5. A user may delete their own sessions and saved rows, but not others'.
+--   5. A user may delete their own sessions and saved rows, but not others';
+--      routines have no delete policy at all (deletion = tombstone update).
 --   6. anon sees nothing and cannot write.
 
 begin;
@@ -31,10 +35,11 @@ values
   ('a0000000-0000-4000-8000-00000000000a', 'User A', 'a@invalid.local'),
   ('b0000000-0000-4000-8000-00000000000b', 'User B', 'b@invalid.local');
 
-insert into public.routines (user_id, name, rest_sec, items, updated_at_ms)
+insert into public.routines (user_id, id, name, rest_sec, items, updated_at_ms)
 values
-  ('a0000000-0000-4000-8000-00000000000a', 'Push A', 90, '[]'::jsonb, 1),
-  ('b0000000-0000-4000-8000-00000000000b', 'Pull B', 60, '[]'::jsonb, 1);
+  ('a0000000-0000-4000-8000-00000000000a', '00000000-0000-0000-0000-000000000000', 'Push A', 90, '[]'::jsonb, 1),
+  ('a0000000-0000-4000-8000-00000000000a', 'aaaa1111-0000-4000-8000-000000000001', 'Pull A', 60, '[]'::jsonb, 1),
+  ('b0000000-0000-4000-8000-00000000000b', '00000000-0000-0000-0000-000000000000', 'Pull B', 60, '[]'::jsonb, 1);
 
 insert into public.sessions (id, user_id, date, name, duration_sec, volume_kg, set_count, exercise_ids, regions)
 values
@@ -57,7 +62,7 @@ begin
   select count(*) into n from public.profiles;
   if n <> 1 then raise exception 'FAIL profiles visibility: A sees % rows, expected 1', n; end if;
   select count(*) into n from public.routines;
-  if n <> 1 then raise exception 'FAIL routines visibility: A sees % rows, expected 1', n; end if;
+  if n <> 2 then raise exception 'FAIL routines visibility: A sees % rows, expected 2 (own collection)', n; end if;
   select count(*) into n from public.sessions;
   if n <> 1 then raise exception 'FAIL sessions visibility: A sees % rows, expected 1', n; end if;
   select count(*) into n from public.saved_exercises;
@@ -70,9 +75,16 @@ begin
   get diagnostics n = row_count;
   if n <> 1 then raise exception 'FAIL: A cannot update own profile'; end if;
 
-  update public.routines set rest_sec = 120 where user_id = (select auth.uid());
+  update public.routines set rest_sec = 120
+  where user_id = (select auth.uid()) and id = '00000000-0000-0000-0000-000000000000';
   get diagnostics n = row_count;
-  if n <> 1 then raise exception 'FAIL: A cannot update own routine'; end if;
+  if n <> 1 then raise exception 'FAIL: A cannot update own routine by id'; end if;
+
+  -- deletion is a tombstone update under the composite key
+  update public.routines set deleted_at_ms = 99, updated_at_ms = 99
+  where user_id = (select auth.uid()) and id = 'aaaa1111-0000-4000-8000-000000000001';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL: A cannot tombstone own routine'; end if;
 
   update public.profiles set name = 'hacked' where user_id = 'b0000000-0000-4000-8000-00000000000b';
   get diagnostics n = row_count;
@@ -82,7 +94,18 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'FAIL: A updated B''s routine'; end if;
 
-  -- 3. session inserts: own user_id ok, forged user_id rejected
+  -- 3. inserts: own user_id ok, forged user_id rejected
+  insert into public.routines (user_id, id, name, rest_sec, items, updated_at_ms)
+  values ((select auth.uid()), 'aaaa2222-0000-4000-8000-000000000002', 'New day', 90, '[]'::jsonb, 2);
+
+  begin
+    insert into public.routines (user_id, id, name)
+    values ('b0000000-0000-4000-8000-00000000000b', 'bbbb1111-0000-4000-8000-000000000001', 'forged routine');
+    raise exception 'FAIL: A inserted a routine for B';
+  exception
+    when insufficient_privilege then null; -- expected: WITH CHECK violation
+  end;
+
   insert into public.sessions (id, user_id, date, name, duration_sec, volume_kg, set_count, exercise_ids, regions)
   values ('33333333-0000-4000-8000-000000000003', (select auth.uid()), now(), 'mine', 60, 100, 1, array['0025'], '{"chest": 1}'::jsonb);
 

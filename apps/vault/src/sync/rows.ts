@@ -1,4 +1,4 @@
-import { SEED_ROUTINE_ID, type PersistedSet, type Profile, type Routine, type RoutineItem, type SessionRecord } from '../state';
+import type { PersistedSet, Profile, Routine, RoutineItem, SessionRecord } from '../state';
 
 /** Row shapes as PostgREST serializes them (see supabase/migrations). */
 export interface SessionRow {
@@ -18,10 +18,14 @@ export interface SessionRow {
 
 export interface RoutineRow {
   user_id: string;
+  /** Client-generated; PK with user_id. The migrated legacy row is nil. */
+  id: string;
   name: string;
   rest_sec: number;
   items: RoutineItem[];
   updated_at_ms: number;
+  /** Tombstone clock (0 = live), symmetric with updated_at_ms. */
+  deleted_at_ms: number;
 }
 
 export interface ProfileRow {
@@ -74,22 +78,23 @@ export function rowToSession(row: SessionRow): SessionRecord {
 export function routineToRow(routine: Routine, userId: string): RoutineRow {
   return {
     user_id: userId,
+    id: routine.id,
     name: routine.name,
     rest_sec: routine.restSec,
     items: routine.items,
     updated_at_ms: routine.updatedAt ?? 0,
+    deleted_at_ms: routine.deletedAt ?? 0,
   };
 }
 
 export function rowToRoutine(row: RoutineRow): Routine {
   return {
-    // The singleton row predates routine ids — it is the nil-id document by
-    // the identity convention (routineToRow drops the id symmetrically).
-    id: SEED_ROUTINE_ID,
+    id: row.id,
     name: row.name,
     restSec: row.rest_sec,
     items: row.items,
     ...(row.updated_at_ms > 0 ? { updatedAt: row.updated_at_ms } : {}),
+    ...(row.deleted_at_ms > 0 ? { deletedAt: row.deleted_at_ms } : {}),
   };
 }
 

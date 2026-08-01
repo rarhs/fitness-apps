@@ -26,5 +26,5 @@ npx vitest run src/__tests__/sync-contract.test.ts
 
 - **Sessions are append-only**: clients get `select`/`insert`/`delete` policies but deliberately **no `update` policy** — a logged session is an immutable fact keyed by a client-generated UUID. The sync adapter must therefore upsert sessions with *ignore duplicates* (`ON CONFLICT DO NOTHING`), never `DO UPDATE`.
 - **`updated_at_ms`** on profiles/routines is the client's last-write-wins clock (ms epoch, set by the app's mutations), not a server timestamp — the server never overwrites it.
-- **One routine per user** for now (`user_id` is the primary key of `routines`), matching the app's single-routine model; going multi-routine later means a new keyed table and a migration.
+- **Routines are a per-user collection** keyed by `(user_id, id)`. The row migrated from the singleton era sits on the nil UUID — the same `SEED_ROUTINE_ID` every client's migrated/seeded routine carries, so identities converge without hashing. `deleted_at_ms` is the client's tombstone clock (0 = live): deletion is an UPDATE that sets it, the table has deliberately **no delete policy**, and tombstones are kept forever (pruning would let a stale device resurrect them).
 - All policies are per-operation, `to authenticated`, with `(select auth.uid())` (cached per statement, not per row). `anon` has no policies and therefore no access.
