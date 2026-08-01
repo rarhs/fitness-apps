@@ -7,12 +7,22 @@ export interface RoutineItem {
 }
 
 export interface Routine {
+  /** Client-generated UUID — the sync identity. The seeded/legacy routine
+   * uses SEED_ROUTINE_ID so every device and the server converge on it. */
+  id: string;
   name: string;
   restSec: number;
   items: RoutineItem[];
   /** ms epoch of the last user edit; absent = never touched (LWW loser). */
   updatedAt?: number;
+  /** ms epoch tombstone; a deleted routine stays in the collection so the
+   * deletion can sync, but is hidden from every UI read. */
+  deletedAt?: number;
 }
+
+/** Identity of the seeded default and of a migrated legacy routine. The
+ * schema migration keys the pre-existing server row under this same id. */
+export const SEED_ROUTINE_ID = '00000000-0000-0000-0000-000000000000';
 
 /** One logged set as persisted: load normalised to kg at record-build time. */
 export interface PersistedSet {
@@ -47,7 +57,10 @@ export interface Profile {
 }
 
 export interface Persisted {
-  routine: Routine;
+  routines: Routine[];
+  /** Device-local (never merged): which routine the UI is working with.
+   * Always points at a live routine. */
+  activeRoutineId: string;
   recents: string[];
   saved: string[];
   history: SessionRecord[];
@@ -55,9 +68,27 @@ export interface Persisted {
   prefs: boolean[];
 }
 
-/** A push day seeded from real dataset IDs so the builder isn't empty on first run. */
+export function liveRoutines(d: Persisted): Routine[] {
+  return d.routines.filter((r) => !r.deletedAt);
+}
+
+export function activeRoutine(d: Persisted): Routine {
+  return d.routines.find((r) => r.id === d.activeRoutineId && !r.deletedAt) ?? liveRoutines(d)[0]!;
+}
+
+/** `base` when no live routine uses it yet, else "base 2", "base 3", … */
+export function uniqueName(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  let n = 2;
+  while (taken.includes(`${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
+
+/** A push day seeded from real dataset IDs so the builder isn't empty on
+ * first run — named as a disposable sample, not a program. */
 const DEFAULT_ROUTINE: Routine = {
-  name: 'Push A',
+  id: SEED_ROUTINE_ID,
+  name: 'Starter Push',
   restSec: 90,
   items: [
     { id: '0025', sets: '4', reps: '8-10' }, // barbell bench press
@@ -73,7 +104,8 @@ const STORAGE_KEY = 'vault:v1';
 
 export function defaults(): Persisted {
   return {
-    routine: DEFAULT_ROUTINE,
+    routines: [DEFAULT_ROUTINE],
+    activeRoutineId: SEED_ROUTINE_ID,
     recents: [],
     saved: [],
     history: [],
@@ -90,16 +122,36 @@ export function defaults(): Persisted {
 
 /** Read persisted state, falling back to defaults on missing or malformed data.
  * A partial object (e.g. from an older version) is merged over the defaults;
- * history entries that predate the sync id field get a UUID assigned. */
+ * history entries that predate the sync id field get a UUID assigned. A legacy
+ * single-routine payload migrates into the collection under SEED_ROUTINE_ID;
+ * the result always has at least one live routine and a valid active id. */
 export function loadPersisted(): Persisted {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaults();
-    const parsed = JSON.parse(raw) as Partial<Persisted>;
+    const parsed = JSON.parse(raw) as Partial<Persisted> & { routine?: Omit<Routine, 'id'> };
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults();
-    const merged = { ...defaults(), ...parsed };
+    const { routine: legacyRoutine, ...rest } = parsed;
+    const merged = { ...defaults(), ...rest };
+
+    const routines = Array.isArray(rest.routines)
+      ? rest.routines.map((r) => (r.id ? r : { ...r, id: crypto.randomUUID() }))
+      : legacyRoutine && typeof legacyRoutine === 'object'
+        ? [{ ...legacyRoutine, id: SEED_ROUTINE_ID }]
+        : defaults().routines;
+    if (!routines.some((r) => !r.deletedAt)) {
+      const idTaken = routines.some((r) => r.id === SEED_ROUTINE_ID);
+      routines.push({ ...DEFAULT_ROUTINE, ...(idTaken ? { id: crypto.randomUUID() } : {}) });
+    }
+    const live = routines.filter((r) => !r.deletedAt);
+    const activeRoutineId = live.some((r) => r.id === merged.activeRoutineId)
+      ? merged.activeRoutineId
+      : live[0]!.id;
+
     return {
       ...merged,
+      routines,
+      activeRoutineId,
       history: Array.isArray(merged.history)
         ? merged.history.map((h) => (h.id ? h : { ...h, id: crypto.randomUUID() }))
         : defaults().history,
@@ -109,31 +161,70 @@ export function loadPersisted(): Persisted {
   }
 }
 
+/** The active routine replaced by `edit`, id preserved and updatedAt stamped. */
+const editActive = (d: Persisted, edit: (r: Routine) => Routine, now: number): Persisted => ({
+  ...d,
+  routines: d.routines.map((r) =>
+    r.id === d.activeRoutineId ? { ...edit(r), id: r.id, updatedAt: now } : r,
+  ),
+});
+
 /** Pure state transitions — the provider wraps each in setState. A mutation
  * returns its input unchanged (same reference) when there is nothing to do.
- * Mutations that edit the routine or profile stamp `updatedAt` for
- * last-write-wins sync; `now` is injectable for tests. */
+ * Mutations that edit a routine or the profile stamp `updatedAt` for
+ * last-write-wins sync; `now` (and new routine ids) are injectable for tests.
+ * setRoutine/addToRoutine/removeFromRoutine target the active routine. */
 export const mutations = {
   setRoutine(d: Persisted, update: (r: Routine) => Routine, now: number = Date.now()): Persisted {
-    return { ...d, routine: { ...update(d.routine), updatedAt: now } };
+    return editActive(d, update, now);
   },
   addToRoutine(d: Persisted, id: string, now: number = Date.now()): Persisted {
-    if (d.routine.items.some((i) => i.id === id)) return d;
-    return {
-      ...d,
-      routine: {
-        ...d.routine,
-        items: [...d.routine.items, { id, sets: '4', reps: '8-10' }],
-        updatedAt: now,
-      },
-    };
+    if (activeRoutine(d).items.some((i) => i.id === id)) return d;
+    return editActive(d, (r) => ({ ...r, items: [...r.items, { id, sets: '4', reps: '8-10' }] }), now);
   },
   removeFromRoutine(d: Persisted, id: string, now: number = Date.now()): Persisted {
-    if (!d.routine.items.some((i) => i.id === id)) return d;
-    return {
-      ...d,
-      routine: { ...d.routine, items: d.routine.items.filter((i) => i.id !== id), updatedAt: now },
+    if (!activeRoutine(d).items.some((i) => i.id === id)) return d;
+    return editActive(d, (r) => ({ ...r, items: r.items.filter((i) => i.id !== id) }), now);
+  },
+  addRoutine(d: Persisted, now: number = Date.now(), id: string = crypto.randomUUID()): Persisted {
+    const routine: Routine = {
+      id,
+      name: uniqueName('New routine', liveRoutines(d).map((r) => r.name)),
+      restSec: d.profile.defaultRestSec,
+      items: [],
+      updatedAt: now,
     };
+    return { ...d, routines: [...d.routines, routine], activeRoutineId: id };
+  },
+  duplicateRoutine(
+    d: Persisted,
+    sourceId: string,
+    now: number = Date.now(),
+    id: string = crypto.randomUUID(),
+  ): Persisted {
+    const src = d.routines.find((r) => r.id === sourceId && !r.deletedAt);
+    if (!src) return d;
+    const copy: Routine = {
+      ...src,
+      id,
+      name: uniqueName(`${src.name} copy`, liveRoutines(d).map((r) => r.name)),
+      updatedAt: now,
+    };
+    return { ...d, routines: [...d.routines, copy], activeRoutineId: id };
+  },
+  deleteRoutine(d: Persisted, id: string, now: number = Date.now()): Persisted {
+    const target = d.routines.find((r) => r.id === id && !r.deletedAt);
+    if (!target || liveRoutines(d).length <= 1) return d;
+    const routines = d.routines.map((r) =>
+      r.id === id ? { ...r, deletedAt: now, updatedAt: now } : r,
+    );
+    const activeRoutineId =
+      d.activeRoutineId === id ? routines.find((r) => !r.deletedAt)!.id : d.activeRoutineId;
+    return { ...d, routines, activeRoutineId };
+  },
+  selectRoutine(d: Persisted, id: string): Persisted {
+    if (d.activeRoutineId === id || !d.routines.some((r) => r.id === id && !r.deletedAt)) return d;
+    return { ...d, activeRoutineId: id };
   },
   pushRecent(d: Persisted, id: string): Persisted {
     if (d.recents[0] === id) return d;
@@ -168,9 +259,15 @@ export const mutations = {
 };
 
 export interface AppState extends Persisted {
+  /** The active routine — what the Builder edits and a session runs. */
+  routine: Routine;
   setRoutine: (update: (r: Routine) => Routine) => void;
   addToRoutine: (id: string) => void;
   removeFromRoutine: (id: string) => void;
+  addRoutine: () => void;
+  duplicateRoutine: (id: string) => void;
+  deleteRoutine: (id: string) => void;
+  selectRoutine: (id: string) => void;
   pushRecent: (id: string) => void;
   toggleSaved: (id: string) => void;
   addSession: (rec: SessionRecord) => void;
@@ -196,9 +293,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const api = useMemo<AppState>(
     () => ({
       ...data,
+      routine: activeRoutine(data),
       setRoutine: (update) => setData((d) => mutations.setRoutine(d, update)),
       addToRoutine: (id) => setData((d) => mutations.addToRoutine(d, id)),
       removeFromRoutine: (id) => setData((d) => mutations.removeFromRoutine(d, id)),
+      addRoutine: () => setData((d) => mutations.addRoutine(d)),
+      duplicateRoutine: (id) => setData((d) => mutations.duplicateRoutine(d, id)),
+      deleteRoutine: (id) => setData((d) => mutations.deleteRoutine(d, id)),
+      selectRoutine: (id) => setData((d) => mutations.selectRoutine(d, id)),
       pushRecent: (id) => setData((d) => mutations.pushRecent(d, id)),
       toggleSaved: (id) => setData((d) => mutations.toggleSaved(d, id)),
       addSession: (rec) => setData((d) => mutations.addSession(d, rec)),

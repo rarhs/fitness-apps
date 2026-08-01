@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Routine, SessionRecord } from '../state';
+import { SEED_ROUTINE_ID, type Routine, type SessionRecord } from '../state';
 import { FakeBackend } from '../sync/fake-backend';
 import { SyncQueue } from '../sync/queue';
 
@@ -17,7 +17,7 @@ function session(id: string): SessionRecord {
 }
 
 function routine(name: string): Routine {
-  return { name, restSec: 90, items: [], updatedAt: 1 };
+  return { id: SEED_ROUTINE_ID, name, restSec: 90, items: [], updatedAt: 1 };
 }
 
 describe('coalescing', () => {

@@ -9,7 +9,7 @@
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { SessionRecord } from '../state';
+import { SEED_ROUTINE_ID, type SessionRecord } from '../state';
 import { SupabaseBackend } from '../sync/supabase-backend';
 
 const URL = process.env.SUPABASE_TEST_URL;
@@ -67,6 +67,7 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
       updatedAt: 1753960000000,
     };
     const routine = {
+      id: SEED_ROUTINE_ID,
       name: 'Push A',
       restSec: 90,
       items: [{ id: '0025', sets: '4', reps: '8-10' }],
@@ -102,8 +103,8 @@ describe.skipIf(!URL || !KEY)('SupabaseBackend contract (local stack)', () => {
   }, 15_000);
 
   it('updates the routine in place on re-put', async () => {
-    await backend.putRoutine({ name: 'Push A', restSec: 90, items: [], updatedAt: 1 });
-    await backend.putRoutine({ name: 'Push B', restSec: 60, items: [], updatedAt: 2 });
+    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Push A', restSec: 90, items: [], updatedAt: 1 });
+    await backend.putRoutine({ id: SEED_ROUTINE_ID, name: 'Push B', restSec: 60, items: [], updatedAt: 2 });
     const state = await backend.fetchState();
     expect(state.routine?.name).toBe('Push B');
     expect(state.routine?.restSec).toBe(60);

@@ -1,4 +1,4 @@
-import type { Persisted, Profile, Routine } from '../state';
+import { SEED_ROUTINE_ID, type Persisted, type Profile, type Routine } from '../state';
 import type { MergeResult, RemoteState } from './types';
 
 const touched = (updatedAt?: number): boolean => (updatedAt ?? 0) > 0;
@@ -19,11 +19,16 @@ function lww<T extends Routine | Profile>(
  *
  * - Sessions are append-only facts keyed by client UUID: union both sides,
  *   newest first; local-only sessions go into the push plan.
- * - Routine and profile are last-write-wins on `updatedAt` (absent = never
- *   touched = 0; ties go to remote). An untouched local default is never
- *   pushed over a missing remote.
+ * - Routines: until the multi-routine schema lands, the backend stores exactly
+ *   one routine per user — by the identity convention, the nil-id one. Only
+ *   that document is last-write-wins merged; other local routines pass through
+ *   local-only. A tombstoned winner is never pushed (the old schema cannot
+ *   represent deletion); a strictly newer remote edit revives it.
+ * - Profile is last-write-wins on `updatedAt` (absent = never touched = 0;
+ *   ties go to remote). An untouched local default is never pushed over a
+ *   missing remote.
  * - Saved is a union; pushed when local contributes ids the remote lacks.
- * - Recents and prefs are device-local and never merged.
+ * - Recents, prefs and the active routine are device-local and never merged.
  */
 export function mergeStates(local: Persisted, remote: RemoteState): MergeResult {
   const remoteIds = new Set(remote.sessions.map((s) => s.id));
@@ -33,7 +38,22 @@ export function mergeStates(local: Persisted, remote: RemoteState): MergeResult 
     (a, b) => b.date.localeCompare(a.date),
   );
 
-  const routine = lww(local.routine, remote.routine);
+  const localNil = local.routines.find((r) => r.id === SEED_ROUTINE_ID);
+  const remoteNil = remote.routine ? { ...remote.routine, id: SEED_ROUTINE_ID } : null;
+  let routines = local.routines;
+  let pushRoutine = false;
+  if (localNil) {
+    const nil = lww(localNil, remoteNil);
+    routines = local.routines.map((r) => (r.id === SEED_ROUTINE_ID ? nil.value : r));
+    pushRoutine = nil.push && !nil.value.deletedAt;
+  } else if (remoteNil) {
+    routines = [...local.routines, remoteNil];
+  }
+  const live = routines.filter((r) => !r.deletedAt);
+  const activeRoutineId = live.some((r) => r.id === local.activeRoutineId)
+    ? local.activeRoutineId
+    : (live[0]?.id ?? local.activeRoutineId);
+
   const profile = lww(local.profile, remote.profile);
 
   const localSaved = new Set(local.saved);
@@ -45,13 +65,14 @@ export function mergeStates(local: Persisted, remote: RemoteState): MergeResult 
     merged: {
       ...local,
       history,
-      routine: routine.value,
+      routines,
+      activeRoutineId,
       profile: profile.value,
       saved,
     },
     push: {
       sessions: pushSessions,
-      routine: routine.push,
+      routine: pushRoutine,
       profile: profile.push,
       saved: pushSaved,
     },

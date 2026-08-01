@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Profile, Routine, SessionRecord } from '../state';
+import { SEED_ROUTINE_ID, type Profile, type Routine, type SessionRecord } from '../state';
 import {
   profileToRow,
   routineToRow,
@@ -30,6 +30,7 @@ const SESSION: SessionRecord = {
 };
 
 const ROUTINE: Routine = {
+  id: SEED_ROUTINE_ID,
   name: 'Push A',
   restSec: 90,
   items: [{ id: '0025', sets: '4', reps: '8-10' }],
@@ -85,7 +86,7 @@ describe('routine mapping', () => {
   });
 
   it('maps the LWW clock: absent updatedAt ↔ 0', () => {
-    const untouched: Routine = { name: 'Push A', restSec: 90, items: [] };
+    const untouched: Routine = { id: SEED_ROUTINE_ID, name: 'Push A', restSec: 90, items: [] };
     expect(routineToRow(untouched, USER).updated_at_ms).toBe(0);
     expect(rowToRoutine(routineToRow(untouched, USER)).updatedAt).toBeUndefined();
   });

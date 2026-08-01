@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaults, type Persisted, type SessionRecord } from '../state';
+import { activeRoutine, defaults, SEED_ROUTINE_ID, type Persisted, type Routine, type SessionRecord } from '../state';
 import { mergeStates } from '../sync/merge';
 import type { RemoteState } from '../sync/types';
 
@@ -40,13 +40,13 @@ describe('first sign-in', () => {
   it('adopts existing local data into an empty account', () => {
     const l = local({
       history: [session('a', 1), session('b', 3)],
-      routine: { ...defaults().routine, restSec: 120, updatedAt: 5000 },
+      routines: [{ ...defaults().routines[0]!, restSec: 120, updatedAt: 5000 }],
       profile: { ...defaults().profile, name: 'Rowan', updatedAt: 6000 },
       saved: ['0025', '0334'],
     });
     const { merged, push } = mergeStates(l, remote());
     expect(merged.history.map((h) => h.id)).toEqual(['a', 'b']);
-    expect(merged.routine.restSec).toBe(120);
+    expect(activeRoutine(merged).restSec).toBe(120);
     expect(push.sessions.map((s) => s.id)).toEqual(['a', 'b']);
     expect(push.routine).toBe(true);
     expect(push.profile).toBe(true);
@@ -56,14 +56,14 @@ describe('first sign-in', () => {
   it('adopts remote data onto a fresh device, pushing nothing', () => {
     const r = remote({
       sessions: [session('r1', 2)],
-      routine: { name: 'Pull B', restSec: 60, items: [], updatedAt: 100 },
+      routine: { id: SEED_ROUTINE_ID, name: 'Pull B', restSec: 60, items: [], updatedAt: 100 },
       profile: { name: 'Rowan', email: 'r@x.com', units: 'lb', defaultRestSec: 60, memberSince: '2024-01-01T00:00:00.000Z', updatedAt: 100 },
       saved: ['0027'],
     });
     const l = local({ recents: ['0001'], prefs: [false, false, false, false] });
     const { merged, push } = mergeStates(l, r);
     expect(merged.history.map((h) => h.id)).toEqual(['r1']);
-    expect(merged.routine.name).toBe('Pull B');
+    expect(activeRoutine(merged).name).toBe('Pull B');
     expect(merged.profile.name).toBe('Rowan');
     expect(merged.saved).toEqual(['0027']);
     expect(push).toEqual(NO_PUSH);
@@ -85,26 +85,26 @@ describe('session union', () => {
 });
 
 describe('last-write-wins documents', () => {
-  const remoteRoutine = { name: 'Remote', restSec: 60, items: [], updatedAt: 1000 };
+  const remoteRoutine = { id: SEED_ROUTINE_ID, name: 'Remote', restSec: 60, items: [], updatedAt: 1000 };
 
   it('newer local routine wins and is pushed', () => {
-    const l = local({ routine: { ...defaults().routine, name: 'Local', updatedAt: 2000 } });
+    const l = local({ routines: [{ ...defaults().routines[0]!, name: 'Local', updatedAt: 2000 }] });
     const { merged, push } = mergeStates(l, remote({ routine: remoteRoutine }));
-    expect(merged.routine.name).toBe('Local');
+    expect(activeRoutine(merged).name).toBe('Local');
     expect(push.routine).toBe(true);
   });
 
   it('newer remote routine wins without a push', () => {
-    const l = local({ routine: { ...defaults().routine, name: 'Local', updatedAt: 500 } });
+    const l = local({ routines: [{ ...defaults().routines[0]!, name: 'Local', updatedAt: 500 }] });
     const { merged, push } = mergeStates(l, remote({ routine: remoteRoutine }));
-    expect(merged.routine.name).toBe('Remote');
+    expect(activeRoutine(merged).name).toBe('Remote');
     expect(push.routine).toBe(false);
   });
 
   it('breaks ties in favor of remote', () => {
-    const l = local({ routine: { ...defaults().routine, name: 'Local', updatedAt: 1000 } });
+    const l = local({ routines: [{ ...defaults().routines[0]!, name: 'Local', updatedAt: 1000 }] });
     const { merged, push } = mergeStates(l, remote({ routine: remoteRoutine }));
-    expect(merged.routine.name).toBe('Remote');
+    expect(activeRoutine(merged).name).toBe('Remote');
     expect(push.routine).toBe(false);
   });
 
@@ -113,6 +113,51 @@ describe('last-write-wins documents', () => {
     const { merged, push } = mergeStates(local(), remote({ profile: remoteProfile }));
     expect(merged.profile).toEqual(remoteProfile);
     expect(push.profile).toBe(false);
+  });
+});
+
+/** Until the multi-routine schema lands, the backend stores exactly one
+ * routine per user — by the identity convention, the nil-id one. Only that
+ * document merges; other local routines stay local-only. */
+describe('interim nil-routine bridge', () => {
+  const nil = (over: Partial<Routine> = {}): Routine => ({ ...defaults().routines[0]!, ...over });
+  const extra: Routine = { id: 'r-local', name: 'Pull day', restSec: 60, items: [], updatedAt: 50 };
+  const remoteNil: Routine = { id: SEED_ROUTINE_ID, name: 'Remote', restSec: 60, items: [], updatedAt: 1000 };
+
+  it('merges only the nil routine; other local routines pass through untouched', () => {
+    const l = local({ routines: [nil({ updatedAt: 500 }), extra], activeRoutineId: 'r-local' });
+    const { merged, push } = mergeStates(l, remote({ routine: remoteNil }));
+    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)?.name).toBe('Remote');
+    expect(merged.routines.find((r) => r.id === 'r-local')).toEqual(extra);
+    expect(merged.activeRoutineId).toBe('r-local');
+    expect(push.routine).toBe(false);
+  });
+
+  it('pushes a newer local nil routine', () => {
+    const l = local({ routines: [nil({ name: 'Mine', updatedAt: 2000 }), extra] });
+    const { merged, push } = mergeStates(l, remote({ routine: remoteNil }));
+    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)?.name).toBe('Mine');
+    expect(push.routine).toBe(true);
+  });
+
+  it('keeps a locally deleted nil routine dead and never pushes the tombstone', () => {
+    const l = local({
+      routines: [nil({ updatedAt: 2000, deletedAt: 2000 }), extra],
+      activeRoutineId: 'r-local',
+    });
+    const { merged, push } = mergeStates(l, remote({ routine: { ...remoteNil, updatedAt: 1000 } }));
+    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)?.deletedAt).toBe(2000);
+    expect(push.routine).toBe(false);
+  });
+
+  it('a strictly newer remote edit revives a locally deleted nil routine', () => {
+    const l = local({
+      routines: [nil({ updatedAt: 2000, deletedAt: 2000 }), extra],
+      activeRoutineId: 'r-local',
+    });
+    const { merged, push } = mergeStates(l, remote({ routine: { ...remoteNil, updatedAt: 3000 } }));
+    expect(merged.routines.find((r) => r.id === SEED_ROUTINE_ID)).toEqual({ ...remoteNil, updatedAt: 3000 });
+    expect(push.routine).toBe(false);
   });
 });
 
