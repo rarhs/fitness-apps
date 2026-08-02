@@ -8,21 +8,30 @@ import {
   instructionSteps,
 } from '@fitness-apps/exercise-data';
 import { Media } from '../components/Media';
-import { exerciseById, pad2 } from '../lib';
+import { ProgressionChart } from '../components/ProgressionChart';
+import { exerciseProgression, type ProgressionPoint } from '../history-math';
+import { exerciseById, formatDay, pad2 } from '../lib';
 import { useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
 
 type StepsState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; steps: string[] };
 
+type Metric = 'top' | '1rm' | 'volume';
+
 export function Detail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { addToRoutine, toggleSaved, saved, pushRecent, prefs } = useAppState();
+  const { addToRoutine, toggleSaved, saved, pushRecent, prefs, history, profile } = useAppState();
   const autoplay = prefs[0] ?? true;
   const entry = exerciseById(id);
 
   const [steps, setSteps] = useState<StepsState>({ status: 'loading' });
+  const [metric, setMetric] = useState<Metric>('top');
+
+  const units = profile.units;
+  const progression = useMemo(() => exerciseProgression(history, id, units), [history, id, units]);
+  const hasLoad = progression.some((p) => p.topSet.load > 0);
 
   useEffect(() => {
     if (entry) pushRecent(entry.id);
@@ -44,6 +53,16 @@ export function Detail() {
       cancelled = true;
     };
   }, [id]);
+
+  const metricDefs: Record<Metric, { label: string; value: (p: ProgressionPoint) => number }> = {
+    top: { label: 'Top set', value: (p) => p.topSet.load },
+    '1rm': { label: 'Est. 1RM', value: (p) => p.estOneRm },
+    volume: { label: 'Volume', value: (p) => p.volume },
+  };
+  const metricValue = hasLoad ? metricDefs[metric].value : (p: ProgressionPoint) => p.bestReps;
+  const metricHeader = hasLoad ? `${metricDefs[metric].label} (${units})` : 'Best reps';
+  const pointDetail = (p: ProgressionPoint) =>
+    hasLoad ? `top set ${p.topSet.reps}×${p.topSet.load} ${units}` : `best ${p.bestReps} reps`;
 
   const related = useMemo(() => {
     if (!entry) return [];
@@ -192,6 +211,55 @@ export function Detail() {
           </div>
         </div>
       </div>
+
+      {progression.length === 1 && (
+        <section style={{ marginTop: 46 }}>
+          <h6 style={{ color: muted(60), marginBottom: 10 }}>Progression</h6>
+          <p className="text-muted" style={{ fontSize: 14, margin: 0 }}>
+            Logged once — {formatDay(progression[0]!.date)}: {pointDetail(progression[0]!)}. One more
+            session draws the line.
+          </p>
+        </section>
+      )}
+      {progression.length >= 2 && (
+        <section style={{ marginTop: 46 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <h6 style={{ color: muted(60), margin: 0 }}>
+              Progression · {progression.length} sessions
+            </h6>
+            {hasLoad && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(Object.keys(metricDefs) as Metric[]).map((k) => (
+                  <button
+                    key={k}
+                    className={`tag chip${metric === k ? ' active' : ''}`}
+                    style={{ textTransform: 'none' }}
+                    aria-pressed={metric === k}
+                    onClick={() => setMetric(k)}
+                  >
+                    {metricDefs[k].label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <ProgressionChart
+            points={progression.map((p) => ({ date: p.date, value: metricValue(p), detail: pointDetail(p) }))}
+            unit={hasLoad ? units : 'reps'}
+            valueHeader={metricHeader}
+            ariaLabel={`${entry.name} progression — ${metricHeader} across ${progression.length} sessions`}
+          />
+        </section>
+      )}
     </main>
   );
 }
