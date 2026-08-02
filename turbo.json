@@ -1,0 +1,21 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "check": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": [],
+      "env": [
+        "SUPABASE_TEST_URL",
+        "SUPABASE_TEST_ANON_KEY",
+        "VITE_SUPABASE_URL",
+        "VITE_SUPABASE_PUBLISHABLE_KEY"
+      ]
+    },
+    "build": {
+      "cache": false,
+      "dependsOn": ["^build"]
+    }
+  }
+}

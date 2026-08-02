@@ -22,7 +22,10 @@ An npm-workspaces monorepo for fitness apps built on the **exercises-dataset** (
 npm install        # once, at the repo root (workspaces)
 npm run sync-data  # regenerate the slim exercise index from the dataset
 npm run check      # tsc --noEmit across all workspaces
+npm test           # vitest across all workspaces
 ```
+
+Root `check`/`test` go through **Turborepo** (`turbo.json`): unchanged workspaces are cache hits. `build` is deliberately **uncached** — Vault's bundle bakes in `VITE_SUPABASE_*` env vars, and nothing repeats builds anyway (Vercel builds outside turbo). If a task ever gains an env-var input, declare it in that task's `env` or its cache will serve stale results. No remote cache is configured.
 
 ## packages/exercise-data
 
