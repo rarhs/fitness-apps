@@ -1,0 +1,53 @@
+# Momentic smoke suite: runs the signed-out E2E tests in apps/vault/momentic
+# against each Vercel preview deployment (the deployment_status event carries
+# the preview URL, so no Vercel token is needed). Skips gracefully while the
+# MOMENTIC_API_KEY repository secret is absent. Deliberately NOT a required
+# status check until it has proven stable.
+name: momentic
+
+on:
+  deployment_status:
+
+jobs:
+  smoke:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      startsWith(github.event.deployment_status.environment, 'Preview')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for the Momentic API key
+        id: key
+        run: echo "present=${{ secrets.MOMENTIC_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version: 22
+
+      - name: Run the smoke suite against the preview
+        if: steps.key.outputs.present == 'true'
+        working-directory: apps/vault
+        env:
+          MOMENTIC_API_KEY: ${{ secrets.MOMENTIC_API_KEY }}
+          # Vercel Deployment Protection blocks anonymous CI browsers; the
+          # bypass token (project settings → Deployment Protection →
+          # Protection Bypass for Automation) lets the run through.
+          VERCEL_BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          # `momentic run` silently drops invalid test files — lint first so
+          # a schema mistake fails loudly instead of shrinking the suite.
+          npx --yes momentic lint
+          URL="${{ github.event.deployment_status.environment_url }}"
+          if [ -n "$VERCEL_BYPASS" ]; then
+            URL="$URL?x-vercel-protection-bypass=$VERCEL_BYPASS&x-vercel-set-bypass-cookie=true"
+          fi
+          npx --yes momentic install-browsers --all
+          npx --yes momentic run \
+            --url-override "$URL" \
+            --retries 1 \
+            --upload-results

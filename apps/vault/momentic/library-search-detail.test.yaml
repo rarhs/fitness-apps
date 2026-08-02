@@ -1,0 +1,10 @@
+# Smoke: search and the exercise detail page — the core reference-library flow.
+fileType: momentic/test/v2
+id: library-search-detail
+description: Searching the library and opening an exercise detail page works.
+steps:
+  - act: search for "bench press" using the exercise search box
+  - assert: the results include exercises whose names mention bench press
+  - act: open the detail page of a barbell bench press exercise from the results
+  - assert: the detail page shows the exercise name and its body part or target muscles
+  - assert: the detail page shows exercise media or instructions

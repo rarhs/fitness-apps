@@ -1,0 +1,11 @@
+# Momentic project file — required by `momentic run` (it refuses to run
+# without one, despite tests being discoverable by path). Kept minimal: the
+# base URL is never set here — CI and local runs pass --url-override, so the
+# same suite targets previews, production or a dev server.
+name: vault
+include:
+  - "momentic/**/*.test.yaml"
+  - "momentic/**/*.module.yaml"
+parallel: 2
+recordVideo: on-fail
+gitMainBranch: main
