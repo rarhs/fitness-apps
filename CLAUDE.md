@@ -45,7 +45,7 @@ Dataset structure and instruction text are MIT, but **all exercise media is © G
 
 ## apps/vault
 
-"Vault" — an exercise reference library, routine builder and session logger, implemented from the Claude Design doc *Vault - Exercise Library* (Nocturne design system, vendored at `apps/vault/src/styles/nocturne.css`). Vite + React SPA, client-only: routines, logged sessions, profile and preferences persist to localStorage; exercise media and instruction text load from the dataset's Pages deployment at runtime. Dev with `npm run dev --workspace @fitness-apps/vault`, build with `npm run build --workspace @fitness-apps/vault`. Routing uses `react-router` v8 (the package itself, not `react-router-dom`).
+"Vault" — an exercise reference library, routine builder and session logger, implemented from the Claude Design doc *Vault - Exercise Library* (Nocturne design system, vendored at `apps/vault/src/styles/nocturne.css`). Vite + React SPA, client-only: routines, logged sessions, profile and preferences persist to localStorage; exercise media and instruction text load from the dataset's Pages deployment at runtime. Dev with `npm run dev --workspace @fitness-apps/vault`, build with `npm run build --workspace @fitness-apps/vault`. Routing uses `react-router` v8 (the package itself, not `react-router-dom`). Installable **PWA** (`vite-plugin-pwa`, autoUpdate): the app shell is precached for offline, exercise media (CacheFirst, capped) and the full dataset (StaleWhileRevalidate) are runtime-cached from the Pages deployment, and Supabase requests are deliberately never cached. Icons are generated, dependency-free, by `scripts/make-icons.mjs` → `public/icons/` (committed; rerun after a redesign).
 
 ## Adding an app
 
