@@ -54,4 +54,4 @@ Create `apps/<name>` as its own workspace package. Consume the data layer via `"
 ## Conventions
 
 - Never add Co-Authored-By to commit messages.
-- Remote: https://github.com/rarhs/fitness-apps. `main` is protected by a ruleset (PRs required, green `check` status required, no force pushes or deletions). For every change: feature branch → PR → merge; never commit to `main` directly, and never merge a PR unless the user explicitly says to.
+- Remote: https://github.com/rarhs/fitness-apps. `main` is protected by a ruleset (PRs required; green `check` AND `smoke` statuses required — `smoke` is the Momentic E2E suite against the PR's Vercel preview, so merges wait ~5 min for it; no force pushes or deletions). For every change: feature branch → PR → merge; never commit to `main` directly, and never merge a PR unless the user explicitly says to.
