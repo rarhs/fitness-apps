@@ -1,4 +1,5 @@
-import type { SessionRecord } from './state';
+import { LB_TO_KG } from './lib';
+import type { PersistedSet, SessionRecord } from './state';
 
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export const WINDOW_WEEKS = 12;
@@ -57,4 +58,67 @@ export function regionBalance(recs: SessionRecord[], top: number = 6): [string, 
     }
   }
   return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, top);
+}
+
+/** One charted session of an exercise, loads in the display unit. */
+export interface ProgressionPoint {
+  sessionId: string;
+  date: string;
+  /** Heaviest set; a tie on load goes to the set with more reps. */
+  topSet: { reps: number; load: number };
+  /** Best Epley estimate across the session's sets: load × (1 + reps/30),
+   * the load itself at reps ≤ 1. */
+  estOneRm: number;
+  /** Σ reps × load across the session's sets for this exercise. */
+  volume: number;
+  /** Highest single-set rep count — the metric for bodyweight movements. */
+  bestReps: number;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const epleyKg = (s: PersistedSet) => (s.reps <= 1 ? s.loadKg : s.loadKg * (1 + s.reps / 30));
+
+/** Per-session progression of one exercise, oldest first. Sessions without
+ * per-set data for the exercise (legacy records, nothing logged) are skipped;
+ * every appearance of the exercise within a session is merged into one point. */
+export function exerciseProgression(
+  history: SessionRecord[],
+  exerciseId: string,
+  unit: 'kg' | 'lb',
+): ProgressionPoint[] {
+  const factor = unit === 'lb' ? 1 / LB_TO_KG : 1;
+  const points: ProgressionPoint[] = [];
+  for (const rec of history) {
+    const sets = rec.exerciseIds.flatMap((id, i) => (id === exerciseId ? (rec.sets?.[i] ?? []) : []));
+    if (sets.length === 0) continue;
+    const top = sets.reduce((a, b) => (b.loadKg > a.loadKg || (b.loadKg === a.loadKg && b.reps > a.reps) ? b : a));
+    points.push({
+      sessionId: rec.id,
+      date: rec.date,
+      topSet: { reps: top.reps, load: round2(top.loadKg * factor) },
+      estOneRm: round2(Math.max(...sets.map(epleyKg)) * factor),
+      volume: round2(sets.reduce((n, s) => n + s.reps * s.loadKg, 0) * factor),
+      bestReps: Math.max(...sets.map((s) => s.reps)),
+    });
+  }
+  return points.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+/** Exercises with at least two charted sessions, most-charted first; a tie on
+ * count goes to the one trained most recently. */
+export function topProgressedExercises(
+  history: SessionRecord[],
+  unit: 'kg' | 'lb',
+  top: number = 6,
+): { id: string; points: ProgressionPoint[] }[] {
+  const ids = [...new Set(history.flatMap((r) => r.exerciseIds))];
+  return ids
+    .map((id) => ({ id, points: exerciseProgression(history, id, unit) }))
+    .filter((t) => t.points.length >= 2)
+    .sort(
+      (a, b) =>
+        b.points.length - a.points.length ||
+        new Date(b.points.at(-1)!.date).getTime() - new Date(a.points.at(-1)!.date).getTime(),
+    )
+    .slice(0, top);
 }
