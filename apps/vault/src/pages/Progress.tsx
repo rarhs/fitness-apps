@@ -1,21 +1,23 @@
 import { Link, useNavigate } from 'react-router';
+import { Sparkline } from '../components/ProgressionChart';
 import {
   WINDOW_WEEKS,
   avgDurationMin,
   distinctExerciseCount,
   regionBalance,
   splitWindows,
+  topProgressedExercises,
   totalTonnageKg,
   weeklyVolumes,
 } from '../history-math';
-import { TOTAL, fmt, formatDay } from '../lib';
+import { TOTAL, exerciseById, fmt, formatDay } from '../lib';
 import { useAppState } from '../state';
 
 const muted = (pct: number) => `color-mix(in srgb, var(--color-text) ${pct}%, transparent)`;
 
 export function Progress() {
   const navigate = useNavigate();
-  const { history } = useAppState();
+  const { history, profile } = useAppState();
   const now = Date.now();
 
   const { recent, prior } = splitWindows(history, now);
@@ -76,6 +78,8 @@ export function Progress() {
 
   const balance = regionBalance(recent);
   const maxSets = balance[0]?.[1] ?? 1;
+
+  const progressed = topProgressedExercises(history, profile.units);
 
   return (
     <main style={{ maxWidth: 1280, margin: '0 auto', padding: '40px 28px 96px' }}>
@@ -201,6 +205,53 @@ export function Progress() {
           </div>
         </div>
       </div>
+
+      {progressed.length > 0 && (
+        <section style={{ marginTop: 44 }}>
+          <h6 style={{ color: muted(60), marginBottom: 12 }}>Exercise progression</h6>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+            {progressed.map(({ id, points }) => {
+              const hasLoad = points.some((p) => p.topSet.load > 0);
+              const latest = points.at(-1)!;
+              const delta = hasLoad
+                ? Math.round((latest.topSet.load - points[0]!.topSet.load) * 100) / 100
+                : latest.bestReps - points[0]!.bestReps;
+              const deltaUnit = hasLoad ? profile.units : 'reps';
+              return (
+                <Link key={id} to={`/exercise/${id}`} className="prog-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+                    <span
+                      style={{
+                        fontSize: 14,
+                        textTransform: 'capitalize',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {exerciseById(id)?.name ?? id}
+                    </span>
+                    <span className="text-muted" style={{ fontSize: 11, flexShrink: 0 }}>
+                      {points.length} sessions
+                    </span>
+                  </div>
+                  <Sparkline values={points.map((p) => (hasLoad ? p.topSet.load : p.bestReps))} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
+                    <span className="text-muted">
+                      {hasLoad
+                        ? `Top set ${latest.topSet.reps}×${latest.topSet.load} ${profile.units}`
+                        : `Best ${latest.bestReps} reps`}
+                    </span>
+                    <span style={{ color: 'var(--color-accent-300)', flexShrink: 0 }}>
+                      {delta === 0 ? '—' : `${delta > 0 ? '+' : '−'}${Math.abs(delta)} ${deltaUnit}`}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
