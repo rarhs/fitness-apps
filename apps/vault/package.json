@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "size": "node scripts/check-bundle-size.mjs"
   },
   "dependencies": {
     "@fitness-apps/exercise-data": "*",
