@@ -44,7 +44,9 @@ export function niceTicks(min: number, max: number, count = 4): number[] {
 
 const fmtVal = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
 
-const PAD = { top: 16, right: 18, bottom: 26, left: 46 };
+/* Top padding reserves room for the endpoint label: the latest session is
+ * often the all-time best, putting the last point on the top gridline. */
+const PAD = { top: 30, right: 18, bottom: 26, left: 46 };
 const HEIGHT = 240;
 
 /** Single-series session-by-session line chart in the Nocturne accent, with a
