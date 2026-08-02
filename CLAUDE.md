@@ -25,7 +25,9 @@ npm run check      # tsc --noEmit across all workspaces
 npm test           # vitest across all workspaces
 ```
 
-Root `check`/`test` go through **Turborepo** (`turbo.json`): unchanged workspaces are cache hits. `build` is deliberately **uncached** — Vault's bundle bakes in `VITE_SUPABASE_*` env vars, and nothing repeats builds anyway (Vercel builds outside turbo). If a task ever gains an env-var input, declare it in that task's `env` or its cache will serve stale results. No remote cache is configured.
+Root `check`/`test` go through **Turborepo** (`turbo.json`): unchanged workspaces are cache hits. `build` is cached too (outputs `dist/**`, `VITE_*` declared in `env` so process-env changes invalidate correctly), consumed by the `size` task — the **bundle-size gate** (`apps/vault/scripts/check-bundle-size.mjs`, run in CI as `npx turbo run size`): gzipped `dist/assets` must stay under budget, guarding the invariant that the full dataset is never bundled. If a task ever gains another env-var input, declare it in that task's `env` or its cache will serve stale results. No remote cache; CI persists `.turbo` via actions/cache.
+
+**Sharp edge (verified empirically, turbo 2.10)**: turbo's file hashing only sees git-tracked files, so gitignored `.env` / `.env.local` changes do NOT invalidate the build cache — declaring them in `inputs` has no effect. Vercel and CI never use `.env` files, so deploys are safe; after editing `.env` locally, use `turbo run build --force`.
 
 ## packages/exercise-data
 
